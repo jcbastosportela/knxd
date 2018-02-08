@@ -28,6 +28,7 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <memory>
+#include "ipsupport.h"
 
 EIBnetServer::EIBnetServer (BaseRouter& r, IniSectionPtr& s)
 	: Server(r,s)
@@ -59,9 +60,13 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
 
   if (GetHostIP (t, &maddr, multicastaddr) == 0)
     {
-      ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable", multicastaddr);
-      goto err_out;
-    }
+      ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable. Trying IPv6", multicastaddr);
+	  if (GetHostIP6 (t, &maddr, multicastaddr) == 0)
+	  {
+	      ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable. Trying IPv6", multicastaddr);
+	      goto err_out;
+	  }
+	 }
 
   if (port)
     {

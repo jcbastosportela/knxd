@@ -28,6 +28,7 @@ class Trace;
 
 /** resolve host name */
 bool GetHostIP (TracePtr t, struct sockaddr_in *sock, const std::string& name);
+bool GetHostIP6 (TracePtr t, struct sockaddr_in *sock, const std::string& _name);
 /** gets source address for a route */
 bool GetSourceAddress (TracePtr t, 
                       const struct sockaddr_in *dest,

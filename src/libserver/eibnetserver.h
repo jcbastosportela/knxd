@@ -95,6 +95,7 @@ public:
   EIBnetDriver (LinkConnectClientPtr c, std::string& multicastaddr, int port, std::string& intf);
   virtual ~EIBnetDriver ();
   struct sockaddr_in maddr;
+  struct sockaddr_in6 maddr6;
 
   bool setup();
   // void start();

@@ -457,48 +457,18 @@ parse_opt (int key, char *arg, struct argp_state *state)
         std::string tracename;
 
         int port = 0;
-        /* if IPv6 */
-       	char *a = strdup (OPT_ARG(arg, state, ""));
-        if( a[0] == '[' )
-        {
-        	fprintf(stderr, "we got IPv6\n");
-        	char *b = strstr (a, "]:");
-        	b += 1;
-        	if (b)
-          	{
-            	*b++ = 0;
-				if (atoi (b) > 0)
-				{
-					(*ini["server"])["port"] = b;
-					fprintf(stderr,"Server Port: %s\n", b);
-				}
-			}
-	        if (*a)
-        	{
-        		(*ini["server"])["multicast-address"] = a;
-        		fprintf(stderr, "Server Addr: %s\n", a);
-        	}
-        }
-        /* IPv4 */
-        else
-        {
-        	char *b = strchr (a, ':');
-        	if (b)
-          	{
-            	*b++ = 0;
-				if (atoi (b) > 0)
-				{
-					(*ini["server"])["port"] = b;
-					fprintf(stderr,"Server Port: %s\n", b);
-				}
-			}
-	        if (*a)
-        	{
-        		(*ini["server"])["multicast-address"] = a;
-        		fprintf(stderr, "Server Addr: %s\n", a);
-        	}
-        }
-
+        char *a = strdup (OPT_ARG(arg, state, ""));
+        char *b = strchr (a, ':');
+        if (b)
+          {
+            *b++ = 0;
+		if (atoi (b) > 0)
+		{
+(*ini["server"])["port"] = b;
+		}
+          }
+        if (*a) 
+          (*ini["server"])["multicast-address"] = a;
 
         if (!name || !*name) {
             name = "knxd";

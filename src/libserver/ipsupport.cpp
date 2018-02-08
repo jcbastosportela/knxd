@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <netdb.h>
+#include <algorithm>
 #include "config.h"
 #include "ipsupport.h"
 #ifdef HAVE_LINUX_NETLINK
@@ -40,27 +41,98 @@
 #include <net/if.h>
 #include <net/route.h>
 #endif
+/* added by portela */
+//#include <ifaddrs.h>
+//#include <netdb.h>
+
+bool
+GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& _name)
+{
+	std::string name;
+	struct hostent *h;
+//	struct ifaddrs *myaddrs, *ifa;
+//	void *in_addr;
+//	char buf[64];
+
+	name.assign(_name);
+	if (name.size() == 0)
+	{
+		return false;
+	}
+	memset (sock, 0, sizeof (*sock));
+	/* remove the [] from ipv6 */
+	name.erase(std::remove(name.begin(), name.end(), '['), name.end());
+	name.erase(std::remove(name.begin(), name.end(), ']'), name.end());
+	fprintf(stderr, "name : %s\n", name.c_str());
+
+	h = gethostbyname2 (name.c_str(), AF_INET6);
+	if (!h)
+    {
+    	if (t)
+    	{
+    		ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: %s", name, hstrerror(h_errno));
+    	}
+    	return false;
+    }
+#ifdef HAVE_SOCKADDR_IN_LEN
+	sock->sin6_len = sizeof (*sock);
+#endif
+	sock->sin6_family = h->h_addrtype;
+	//sock->sin6_addr = (*((unsigned long *) h->h_addr_list[0]));
+
+	/*
+	if(getifaddrs(&myaddrs) != 0)
+	{
+		perror("getifaddrs");
+		return false;
+	}
+
+	for( ifa = myaddrs; ifa != NULL; ifa = ifa->ifa_next )
+	{
+		if( ifa->ifa_addr == NULL )
+		{
+			continue;
+		}
+		if( !(ifa->ifa_flags & IFF_UP )
+		{
+			continue;
+		}
+
+		switch( ifa->ifa_addr->sa_familly )
+		{
+		}
+	}
+	*/	
+	return true;
+}
 
 bool
 GetHostIP (TracePtr t, struct sockaddr_in *sock, const std::string& name)
 {
-  struct hostent *h;
-  if (name.size() == 0)
-    return false;
-  memset (sock, 0, sizeof (*sock));
-  h = gethostbyname (name.c_str());
-  if (!h)
+	struct hostent *h;
+
+	if (name.size() == 0)
+	{
+		return false;
+	}
+	memset (sock, 0, sizeof (*sock));
+
+	h = gethostbyname (name.c_str());
+	if (!h)
     {
-      if (t)
-        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: %s", name, hstrerror(h_errno));
-      return false;
+    	if (t)
+    	{
+    		ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: %s", name, hstrerror(h_errno));
+    	}
+    	return false;
     }
 #ifdef HAVE_SOCKADDR_IN_LEN
-  sock->sin_len = sizeof (*sock);
+	sock->sin_len = sizeof (*sock);
 #endif
-  sock->sin_family = h->h_addrtype;
-  sock->sin_addr.s_addr = (*((unsigned long *) h->h_addr_list[0]));
-  return true;
+	sock->sin_family = h->h_addrtype;
+	sock->sin_addr.s_addr = (*((unsigned long *) h->h_addr_list[0]));
+
+	return true;
 }
 
 #ifdef HAVE_LINUX_NETLINK

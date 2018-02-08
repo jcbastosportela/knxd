@@ -23,6 +23,8 @@
 #include "usb.h"
 #include "types.h"
 
+#define	LIBUSB_LOG_LEVEL_ERROR 0
+#define	LIBUSB_LOG_LEVEL_DEBUG 1
 static void pollfd_added_cb (int fd UNUSED, short events UNUSED, void *user_data)
 {
   USBLoop *loop = static_cast<USBLoop *>(user_data);

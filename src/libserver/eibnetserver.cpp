@@ -216,11 +216,17 @@ EIBnetServer::setup()
   discover = cfg->value("discover",false);
   single_port = !cfg->value("multi-port",false);
   multicastaddr = cfg->value("multicast-address","224.0.23.12");
-  multicastaddr6 = cfg->value("multicast-address6","0");
+  multicastaddr6 = cfg->value("multicast-address6","\0");
   port = cfg->value("port",3671);
   port6 = cfg->value("port6",4242);
   interface = cfg->value("interface","");
   servername = cfg->value("name", dynamic_cast<Router *>(&router)->servername);
+  /*
+  TRACEPRINTF (t, 8, "multicastaddr %s", multicastaddr);
+  TRACEPRINTF (t, 8, "multicastaddr6 %s", multicastaddr6);
+  TRACEPRINTF (t, 8, "port %s", port);
+  TRACEPRINTF (t, 8, "port6 %s", port6);
+  */
   bIPv6 = multicastaddr6.length()>0;
   if (tunnel)
     {
@@ -304,7 +310,7 @@ EIBnetServer::start()
       goto err_out3;
     }
   }
-  else /* IPv4 */
+  //else /* IPv4 */
   {
     struct sockaddr_in baddr;
     LinkConnectClientPtr mcast_conn;

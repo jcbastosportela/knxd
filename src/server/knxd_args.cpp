@@ -367,6 +367,10 @@ static struct argp_option options[] = {
    "enable the EIBnet/IP server to answer discovery and description requests (SEARCH, DESCRIPTION)"},
   {"Server", 'S', "ip[:port]", OPTION_ARG_OPTIONAL,
    "starts an EIBnet/IP multicast server"},
+  // added by portela{
+  {"ServerIPv6", 'X', "ip[:port]", OPTION_ARG_OPTIONAL,
+   "starts an EIBnet/IPv6 multicast server (Note: when using IPv6 address directly should be inside []. eg: --ServerIPv6=[ff12::4242]:1234"},
+   // }
   {"Interface", 'I', "intf", 0,
    "Interface to use"},
   {"Name", 'n', "SERVERNAME", 0,
@@ -443,6 +447,52 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'I':
       (*ini["server"])["interface"] = arg;
       break;
+    case 'X':
+      {
+        if (arguments->filters.size())
+          die("Use filters in front of -R or -T, not -S");
+        ADD((*ini["main"])["connections"], "server");
+        (*ini["server"])["server"] = "ets_router";
+        arguments->want_server = false;
+
+        const char *serverip;
+        const char *name = arguments->servername.c_str();
+        std::string tracename;
+
+        int port = 0;
+       	char *a = strdup (OPT_ARG(arg, state, ""));
+        if( a[0] == '[' )
+        {
+          a++;
+        }
+        char *b = strstr (a, "]:");
+        *b='\0';
+        b += 1;
+        if (b)
+        {
+          *b++ = 0;
+          if (atoi (b) > 0)
+          {
+            (*ini["server"])["port6"] = b;
+          }
+        }
+        if (*a)
+        {
+          (*ini["server"])["multicast-address6"] = a;
+        }
+
+        if (!name || !*name) {
+            name = "knxd";
+            tracename = "mcast";
+        } else {
+            tracename = "mcast:";
+            tracename += name;
+        }
+        (*ini["debug-server"])["name"] = tracename;
+        (*ini["server"])["debug"] = "debug-server";
+        arguments->stack("server");
+        break;
+      }
     case 'S':
       {
         if (arguments->filters.size())
@@ -457,43 +507,19 @@ parse_opt (int key, char *arg, struct argp_state *state)
         std::string tracename;
 
         int port = 0;
-        /* if IPv6 */
        	char *a = strdup (OPT_ARG(arg, state, ""));
-        if( a[0] == '[' )
+        char *b = strchr (a, ':');
+        if (b)
         {
-          a++;
-        	char *b = strstr (a, "]:");
-          *b='\0';
-        	b += 1;
-        	if (b)
+          *b++ = 0;
+          if (atoi (b) > 0)
           {
-            *b++ = 0;
-            if (atoi (b) > 0)
-            {
-              (*ini["server"])["port6"] = b;
-				    }
+            (*ini["server"])["port"] = b;
           }
-	        if (*a)
-        	{
-        		(*ini["server"])["multicast-address6"] = a;
-        	}
         }
-        /* IPv4 */
-        else
+        if (*a)
         {
-        	char *b = strchr (a, ':');
-        	if (b)
-          {
-           	*b++ = 0;
-            if (atoi (b) > 0)
-            {
-              (*ini["server"])["port"] = b;
-            }
-			    }
-	        if (*a)
-        	{
-        		(*ini["server"])["multicast-address"] = a;
-        	}
+          (*ini["server"])["multicast-address"] = a;
         }
 
         if (!name || !*name) {

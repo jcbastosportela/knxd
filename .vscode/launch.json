@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/src/server/knxd",
-            "args": ["-t1023","-e", "0.0.1", "-E", "0.0.2:2", "-DTR", "--Server=[ff12::4242]:4242", "-b", "tpuarts:/dev/ttyUSB0"],
+            "args": ["-t1023","-e", "0.0.1", "-E", "0.0.2:2", "-DTR", "--ServerIPv6=[ff12::4242]:4242", "--Server=224.0.12.23:3671", "-b", "tpuarts:/dev/ttyUSB0"],
             //"args": ["-e", "0.0.1", "-E", "0.0.2:2", "-DTR", "--Server=224.0.13.24:3671", "-b", "tpuarts:/dev/ttyUSB0"],
             "stopAtEntry": true,
             "cwd": "${workspaceFolder}",

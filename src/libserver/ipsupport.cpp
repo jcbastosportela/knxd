@@ -41,12 +41,9 @@
 #include <net/if.h>
 #include <net/route.h>
 #endif
-/* added by portela */
-//#include <ifaddrs.h>
-//#include <netdb.h>
 
 bool
-GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
+GetHostIP (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
 {
   int sockfd;  
   struct addrinfo hints, *servinfo, *p;
@@ -57,9 +54,11 @@ GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
   hints.ai_family = AF_UNSPEC; // use AF_INET6 to force IPv6
   hints.ai_socktype = SOCK_STREAM;
 
+  // "0" is the port, just something
+  // TODO: instead of "0", when a real hostname is passed we shall try to parse the service (http, ftp, ...)
   if ( (rv = getaddrinfo( name.c_str() , "0" , &hints , &servinfo)) != 0) 
   {
-      fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+      ERRORPRINTF (t, E_ERROR | 50, "getaddrinfo: %s\n", gai_strerror(rv));
       return false;
   }
 
@@ -70,11 +69,13 @@ GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
     {
       case AF_UNSPEC:
         ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: Family unspecified\n", name);
+        // TODO: handle. For now we just fail
+        return false;
         break;
       
       case AF_INET:
         ERRORPRINTF (t, E_ERROR | 50, "Resolving %s Success: IPv4\n", name);
-
+        // TODO: implement something, potentially use this function for IPv4 as well and deprecate GetHostIP (TracePtr t, struct sockaddr_in *sock, const std::string& name)
         break;
 
       case AF_INET6:
@@ -83,59 +84,7 @@ GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
         break;
     }
   }
-    
   freeaddrinfo(servinfo); // all done with this structure
-//	std::string name;
-//	struct hostent *h;
-//	struct ifaddrs *myaddrs, *ifa;
-//	void *in_addr;
-//	char buf[64];
-/*
-	if (name.size() == 0)
-	{
-		return false;
-	}
-	memset (sock, 0, sizeof (*sock));
-	fprintf(stderr, "name : %s\n", name.c_str());
-
-	h = gethostbyname2 (name.c_str(), AF_INET6);
-	if (!h)
-  {
-    if (t)
-    {
-      ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: %s", name, hstrerror(h_errno));
-    }
-    return false;
-  }
-#ifdef HAVE_SOCKADDR_IN_LEN
-	sock->sin6_len = sizeof (*sock);
-#endif
-	sock->sin6_family = h->h_addrtype;
-	//sock->sin6_addr = h->h_addr_list[0]));
-*/
-	/*
-	if(getifaddrs(&myaddrs) != 0)
-	{
-		perror("getifaddrs");
-		return false;
-	}
-
-	for( ifa = myaddrs; ifa != NULL; ifa = ifa->ifa_next )
-	{
-		if( ifa->ifa_addr == NULL )
-		{
-			continue;
-		}
-		if( !(ifa->ifa_flags & IFF_UP )
-		{
-			continue;
-		}
-
-		switch( ifa->ifa_addr->sa_familly )
-		{
-		}
-	}
-	*/	
 	return true;
 }
 
@@ -226,7 +175,7 @@ err_out:
 }
 
 bool
-GetSourceAddress6 (TracePtr t UNUSED, const struct sockaddr_in6 *dest, struct sockaddr_in6 *src)
+GetSourceAddress (TracePtr t UNUSED, const struct sockaddr_in6 *dest, struct sockaddr_in6 *src)
 {
   int s;
   int l;

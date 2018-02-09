@@ -48,7 +48,8 @@ EIBnetServer::EIBnetServer (BaseRouter& r, IniSectionPtr& s)
 }
 
 EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
-                            std::string& multicastaddr, int port, std::string& intf)
+                            std::string& multicastaddr, int port,
+                            std::string& intf)
   : SubDriver(c)
 {
   struct sockaddr_in baddr;
@@ -56,7 +57,7 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
   struct ip_mreq mcfg;
   struct ipv6_mreq mcfg6;
   bool bIPv4 = true;
-  bool bIPv6 = false;
+  bool bIPv6 = true;
   sock = 0;
   t->setAuxName("driver");
 
@@ -64,21 +65,26 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
 
   if (GetHostIP (t, &maddr, multicastaddr) == 0)
   {
-    ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable. Trying IPv6", multicastaddr);
-    if (GetHostIP6 (t, &maddr6, multicastaddr) == 0)
-    {
-      ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable.", multicastaddr);
-      goto err_out;
-    }
-    bIPv6 = true;
+    TRACEPRINTF(t, 8,  "Addr '%s' not resolvable as IPv4.", multicastaddr);
     bIPv4 = false;
+  }
+  if ( !bIPv4 && (GetHostIP (t, &maddr6, multicastaddr) == 0) )
+  {
+    TRACEPRINTF(t, 8,  "Addr '%s' not resolvable as IPv6.", multicastaddr);
+    bIPv6 = false;
+  }
+  if( !bIPv4 && !bIPv6 )
+  {
+    ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable as IPv4 neither as IPv6.", multicastaddr);
+    // If there's no IP at all
+    goto err_out;
   }
 
   if( bIPv4 )
   {
     if (port)
     {
-      ERRORPRINTF (t, E_ERROR | 11, "IPv4 selected port '%d'", port);
+      TRACEPRINTF(t, 8, "IPv4 selected port %d", port);
       maddr.sin_port = htons (port);
       memset (&baddr, 0, sizeof (baddr));
     #ifdef HAVE_SOCKADDR_IN_LEN
@@ -100,7 +106,7 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
     {
       EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
       maddr.sin_port = parent.Port;
-      ERRORPRINTF (t, E_ERROR | 11, "IPv4 no selected port. Using %d", parent.Port);
+      TRACEPRINTF(t, 8, "IPv4 no selected port. Using %d", parent.Port);
       sock = parent.sock;
     }
 
@@ -119,7 +125,7 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
   {
     if (port)
     {
-      ERRORPRINTF (t, E_ERROR | 11, "IPv6 selected port '%d'", port);
+      TRACEPRINTF(t, 8, "IPv6 selected port '%d'", port);
       maddr6.sin6_port = htons (port);
       memset (&baddr6, 0, sizeof (baddr6));
     #ifdef HAVE_SOCKADDR_IN_LEN
@@ -140,7 +146,7 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
     else
     {
       EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
-      ERRORPRINTF (t, E_ERROR | 11, "IPv6 no selected port. Using %d", parent.Port);
+      TRACEPRINTF(t, 8, "IPv6 no selected port. Using %d", parent.Port);
       maddr6.sin6_port = parent.Port;
       sock = parent.sock;
     }
@@ -151,7 +157,7 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
       goto err_out;
 
     /** This causes us to ignore multicast packets sent by ourselves */
-    if (!GetSourceAddress6 (t, &maddr6, &sock->localaddr_ip6))
+    if (!GetSourceAddress (t, &maddr6, &sock->localaddr_ip6))
       goto err_out;
     sock->localaddr_ip6.sin6_port = std::static_pointer_cast<EIBnetServer>(server)->Port;
     sock->recvall = 2;
@@ -202,7 +208,7 @@ EIBnetServer::setup()
 //                     const bool discover, const bool single_port)
 {
 
-  ERRORPRINTF (t, E_ERROR | 11, "EIBnetServer::setup()");
+  TRACEPRINTF (t, 8, "EIBnetServer::setup()");
   if(!Server::setup())
     return false;
   route = router_cfg->name.size() > 0;
@@ -210,7 +216,7 @@ EIBnetServer::setup()
   discover = cfg->value("discover",false);
   single_port = !cfg->value("multi-port",false);
   multicastaddr = cfg->value("multicast-address","224.0.23.12");
-  multicastaddr6 = cfg->value("multicast-address6","\0");
+  multicastaddr6 = cfg->value("multicast-address6","0");
   port = cfg->value("port",3671);
   port6 = cfg->value("port6",4242);
   interface = cfg->value("interface","");
@@ -240,7 +246,6 @@ EIBnetServer::start()
 {
   if( bIPv6 )
   {
-    ERRORPRINTF (t, E_ERROR | 11, "EIBnetServer::start() ipv6");
     struct sockaddr_in6 baddr6;
     LinkConnectClientPtr mcast_conn6;
 
@@ -277,9 +282,9 @@ EIBnetServer::start()
     sock->on_recv.set<EIBnetServer,&EIBnetServer::recv_cb>(this);
     sock->on_error.set<EIBnetServer,&EIBnetServer::error_cb>(this);
     sock->recvall = 1;
-    ERRORPRINTF (t, E_ERROR | 27, "---->");
+    
     Port = sock->port6 ();
-    ERRORPRINTF (t, E_ERROR | 27, "Port: %d", Port);
+  
     mcast_conn6 = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnetServer>(shared_from_this()), router_cfg, t));
     mcast6 = EIBnetDriverPtr(new EIBnetDriver (mcast_conn6, multicastaddr6, single_port ? 0 : port6, interface));
     if (!mcast6)
@@ -298,7 +303,6 @@ EIBnetServer::start()
       ERRORPRINTF (t, E_ERROR | 42, "EIBnetDriver ipv6 creation failed: (route && !static_cast<Router &>(router).registerLink(mcast_conn6)");
       goto err_out3;
     }
-    ERRORPRINTF (t, E_ERROR | 27, "<----");
   }
   else /* IPv4 */
   {

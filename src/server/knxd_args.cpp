@@ -461,7 +461,6 @@ parse_opt (int key, char *arg, struct argp_state *state)
        	char *a = strdup (OPT_ARG(arg, state, ""));
         if( a[0] == '[' )
         {
-        	fprintf(stderr, "we got IPv6\n");
           a++;
         	char *b = strstr (a, "]:");
           *b='\0';
@@ -472,13 +471,11 @@ parse_opt (int key, char *arg, struct argp_state *state)
             if (atoi (b) > 0)
             {
               (*ini["server"])["port6"] = b;
-              fprintf(stderr,"Server Port: %s\n", b);
 				    }
           }
 	        if (*a)
         	{
         		(*ini["server"])["multicast-address6"] = a;
-        		fprintf(stderr, "Server Addr: %s\n", a);
         	}
         }
         /* IPv4 */
@@ -486,21 +483,18 @@ parse_opt (int key, char *arg, struct argp_state *state)
         {
         	char *b = strchr (a, ':');
         	if (b)
-          	{
-            	*b++ = 0;
-				if (atoi (b) > 0)
-				{
-					(*ini["server"])["port"] = b;
-					fprintf(stderr,"Server Port: %s\n", b);
-				}
-			}
+          {
+           	*b++ = 0;
+            if (atoi (b) > 0)
+            {
+              (*ini["server"])["port"] = b;
+            }
+			    }
 	        if (*a)
         	{
         		(*ini["server"])["multicast-address"] = a;
-        		fprintf(stderr, "Server Addr: %s\n", a);
         	}
         }
-
 
         if (!name || !*name) {
             name = "knxd";

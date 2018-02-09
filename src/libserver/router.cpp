@@ -169,7 +169,6 @@ Router::setup()
   force_broadcast = s->value("force-broadcast", false);
   unknown_ok = s->value("unknown-ok", false);
 
-  ERRORPRINTF (t, E_ERROR | 55, "Router::setup()");
   start_timeout = s->value("timeout",0);
   if (std::isnan(start_timeout) || start_timeout < 0)
     {

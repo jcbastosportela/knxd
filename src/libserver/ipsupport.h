@@ -28,14 +28,12 @@ class Trace;
 
 /** resolve host name */
 bool GetHostIP (TracePtr t, struct sockaddr_in *sock, const std::string& name);
-bool GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& _name);
+bool GetHostIP (TracePtr t, struct sockaddr_in6 *sock, const std::string& _name);
+//bool GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& _name);
 /** gets source address for a route */
-bool GetSourceAddress (TracePtr t, 
-                      const struct sockaddr_in *dest,
-		      struct sockaddr_in *src);
-bool GetSourceAddress6 (TracePtr t, 
-                      const struct sockaddr_in6 *dest,
-		      struct sockaddr_in6 *src);
+bool GetSourceAddress (TracePtr t, const struct sockaddr_in *dest, struct sockaddr_in *src);
+bool GetSourceAddress (TracePtr t, const struct sockaddr_in6 *dest, struct sockaddr_in6 *src);
+//bool GetSourceAddress6 (TracePtr t, const struct sockaddr_in6 *dest, struct sockaddr_in6 *src);
 /** convert a to EIBnet/IP format */
 CArray IPtoEIBNetIP (const struct sockaddr_in *a, bool nat);
 /** convert EIBnet/IP IP Address to a */

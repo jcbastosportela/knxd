@@ -433,14 +433,10 @@ EIBNetIPSocket::io_send_cb (ev::io &w UNUSED, int revents UNUSED)
   t->TracePacket (0, "Send", p);
   int i = 0;
   int k = 0;
-  //if( s.addr.sin_addr != 0 ) /* if IPv4 available */
-  //{
-    i = sendto (fd, p.data(), p.size(), 0, (const struct sockaddr *) &s.addr, sizeof (s.addr));
-  //}
-  //if( s.addr6.sin6_addr != 0 ) /* if IPv6 available */
-  //{
-    k = sendto (fd, p.data(), p.size(), 0, (const struct sockaddr *) &s.addr6, sizeof (s.addr6));
-  //}
+  // IPv4 Multicast
+  i = sendto (fd, p.data(), p.size(), 0, (const struct sockaddr *) &s.addr, sizeof (s.addr));
+  // IPv6 Multicast
+  k = sendto (fd, p.data(), p.size(), 0, (const struct sockaddr *) &s.addr6, sizeof (s.addr6));
 
   if ( (i > 0) || (k>0) )
     {

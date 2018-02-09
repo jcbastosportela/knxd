@@ -305,11 +305,19 @@ bool
 LinkConnectSingle::setup()
 {
   if (!LinkConnectClient::setup())
+  {
+    ERRORPRINTF (t, E_ERROR | 55, "(!LinkConnectClient::setup()");
     return false;
+  }
   if (addr == 0)
+  {
     addr = static_cast<Router &>(router).get_client_addr(t);
+  }  
   if (addr == 0)
+  {
+    ERRORPRINTF (t, E_ERROR | 55, "(addr == 0)");
     return false;
+  }
   return true;
 }
 

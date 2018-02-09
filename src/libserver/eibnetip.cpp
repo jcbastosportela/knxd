@@ -51,6 +51,24 @@ EIBNetIPPacket::fromPacket (const CArray & c, const struct sockaddr_in src)
   return p;
 }
 
+EIBNetIPPacket *
+EIBNetIPPacket::fromPacket (const CArray & c, const struct sockaddr_in6 src)
+{
+  EIBNetIPPacket *p;
+  if (c.size() < 6)
+    return 0;
+  if (c[0] != 0x6 || c[1] != 0x10)
+    return 0;
+  unsigned len = (c[4] << 8) | c[5];
+  if (len != c.size())
+    return 0;
+  p = new EIBNetIPPacket;
+  p->service = (c[2] << 8) | c[3];
+  p->data.set (c.data() + 6, len - 6);
+  p->src6 = src;
+  return p;
+}
+
 CArray
 EIBNetIPPacket::ToPacket ()
   CONST
@@ -191,6 +209,84 @@ EIBNetIPSocket::EIBNetIPSocket (struct sockaddr_in bindaddr, bool reuseaddr,
   TRACEPRINTF (t, 0, "Opened");
 }
 
+EIBNetIPSocket::EIBNetIPSocket (struct sockaddr_in6 bindaddr, bool reuseaddr,
+				TracePtr tr, SockMode mode)
+{
+  int i;
+  t = tr;
+  TRACEPRINTF (t, 0, "Open");
+  multicast = false;
+  memset (&maddr, 0, sizeof (maddr));
+  memset (&maddr6, 0, sizeof (maddr6));
+  memset (&sendaddr, 0, sizeof (sendaddr));
+  memset (&recvaddr, 0, sizeof (recvaddr));
+  memset (&recvaddr2, 0, sizeof (recvaddr2));
+  recvall = 0;
+
+  io_send.set<EIBNetIPSocket, &EIBNetIPSocket::io_send_cb>(this);
+  io_recv.set<EIBNetIPSocket, &EIBNetIPSocket::io_recv_cb>(this);
+  on_recv.set<EIBNetIPSocket, &EIBNetIPSocket::recv_cb>(this); // dummy
+  on_error.set<EIBNetIPSocket, &EIBNetIPSocket::error_cb>(this); // dummy
+  on_next.set<EIBNetIPSocket, &EIBNetIPSocket::next_cb>(this); // dummy
+
+  fd = socket (AF_INET6, SOCK_DGRAM, 0);
+  if (fd == -1)
+    return;
+  //set_non_blocking(fd);
+
+  // Set the number of hops
+  uint32_t u8Hops = 10;
+  if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &u8Hops, sizeof(u8Hops)) < 0)
+  {
+    ERRORPRINTF (t, E_ERROR | 39, "cannot set number of hops: %s", strerror(errno));
+    close(fd);
+    fd = -1;
+    return;
+  }
+
+  if (reuseaddr)
+  {
+    i = 1;
+    if (setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &i, sizeof (i)) == -1)
+    {
+      ERRORPRINTF (t, E_ERROR | 45, "cannot reuse address: %s", strerror(errno));
+      close (fd);
+      fd = -1;
+      return;
+    }
+  }
+  if (bind (fd, (struct sockaddr *) &bindaddr, sizeof (bindaddr)) == -1)
+  {
+    ERRORPRINTF (t, E_ERROR | 38, "cannot bind to address: %s", strerror(errno));
+    close (fd);
+    fd = -1;
+    return;
+  }
+
+  // Enable loopback so processes on the same host see each other.
+  {
+    uint32_t loopch=1;
+ 
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loopch, sizeof(loopch)) < 0)
+    {
+      ERRORPRINTF (t, E_ERROR | 39, "cannot turn on multicast loopback: %s", strerror(errno));
+      close(fd);
+      fd = -1;
+      return;
+    }
+  }
+
+  // don't really care if this fails
+  if (mode == S_RD)
+    shutdown (fd, SHUT_WR);
+  if (mode == S_WR)
+    shutdown (fd, SHUT_RD);
+  else
+    io_recv.start(fd, ev::READ);
+
+  TRACEPRINTF (t, 0, "Opened");
+}
+
 EIBNetIPSocket::~EIBNetIPSocket ()
 {
   TRACEPRINTF (t, 0, "Close");
@@ -254,6 +350,21 @@ EIBNetIPSocket::port ()
   return sa.sin_port;
 }
 
+int
+EIBNetIPSocket::port6 ()
+{
+  struct sockaddr_in6 sa;
+  socklen_t saLen = sizeof(sa);
+  if (getsockname(fd, (struct sockaddr *) &sa, &saLen) < 0)
+    return -1;
+  if (sa.sin6_family != AF_INET6)
+    {
+      errno = ENODATA;
+      return -1;
+    }
+  return sa.sin6_port;
+}
+
 bool
 EIBNetIPSocket::SetMulticast (struct ip_mreq multicastaddr)
 {
@@ -263,6 +374,22 @@ EIBNetIPSocket::SetMulticast (struct ip_mreq multicastaddr)
   if (setsockopt (fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &maddr, sizeof (maddr))
       == -1)
     return false;
+  multicast = true;
+  return true;
+}
+
+bool
+EIBNetIPSocket::SetMulticast (struct ipv6_mreq multicastaddr)
+{
+  if (multicast)
+  {
+    return false;
+  }
+  maddr6 = multicastaddr;
+  if (setsockopt (fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &maddr6, sizeof (maddr6)) == -1)
+  {
+    return false;
+  }
   multicast = true;
   return true;
 }
@@ -281,6 +408,18 @@ EIBNetIPSocket::Send (EIBNetIPPacket p, struct sockaddr_in addr)
 }
 
 void
+EIBNetIPSocket::Send (EIBNetIPPacket p, struct sockaddr_in6 addr)
+{
+  struct _EIBNetIP_Send s;
+  t->TracePacket (1, "Send", p.data);
+  s.data = p;
+  s.addr6 = addr;
+
+  if (send_q.isempty())
+    io_send.start(fd, ev::WRITE);
+  send_q.put (std::move(s));
+}
+void
 EIBNetIPSocket::io_send_cb (ev::io &w UNUSED, int revents UNUSED)
 {
   if (send_q.isempty ())
@@ -292,16 +431,25 @@ EIBNetIPSocket::io_send_cb (ev::io &w UNUSED, int revents UNUSED)
   const struct _EIBNetIP_Send s = send_q.front ();
   CArray p = s.data.ToPacket ();
   t->TracePacket (0, "Send", p);
-  int i = sendto (fd, p.data(), p.size(), 0,
-                      (const struct sockaddr *) &s.addr, sizeof (s.addr));
-  if (i > 0)
+  int i = 0;
+  int k = 0;
+  //if( s.addr.sin_addr != 0 ) /* if IPv4 available */
+  //{
+    i = sendto (fd, p.data(), p.size(), 0, (const struct sockaddr *) &s.addr, sizeof (s.addr));
+  //}
+  //if( s.addr6.sin6_addr != 0 ) /* if IPv6 available */
+  //{
+    k = sendto (fd, p.data(), p.size(), 0, (const struct sockaddr *) &s.addr6, sizeof (s.addr6));
+  //}
+
+  if ( (i > 0) || (k>0) )
     {
       send_q.get ();
       send_error = 0;
     }
   else
     {
-      if (i == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR))
+      if ( ( (i == 0) && (k == 0) ) || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR))
         {
           TRACEPRINTF (t, 0, "Send: %s", strerror(errno));
           if (send_error++ > 5)
@@ -331,6 +479,7 @@ EIBNetIPSocket::io_recv_cb (ev::io &w UNUSED, int revents UNUSED)
     {
       if (recvall == 1 || !memcmp (&r, &recvaddr, sizeof (r)) ||
           (recvall == 2 && memcmp (&r, &localaddr, sizeof (r))) ||
+          (recvall == 2 && memcmp (&r, &localaddr_ip6, sizeof (r))) ||
           (recvall == 3 && !memcmp (&r, &recvaddr2, sizeof (r))))
         {
           t->TracePacket (0, "Recv", i, buf);

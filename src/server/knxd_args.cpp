@@ -462,20 +462,22 @@ parse_opt (int key, char *arg, struct argp_state *state)
         if( a[0] == '[' )
         {
         	fprintf(stderr, "we got IPv6\n");
+          a++;
         	char *b = strstr (a, "]:");
+          *b='\0';
         	b += 1;
         	if (b)
-          	{
-            	*b++ = 0;
-				if (atoi (b) > 0)
-				{
-					(*ini["server"])["port"] = b;
-					fprintf(stderr,"Server Port: %s\n", b);
-				}
-			}
+          {
+            *b++ = 0;
+            if (atoi (b) > 0)
+            {
+              (*ini["server"])["port6"] = b;
+              fprintf(stderr,"Server Port: %s\n", b);
+				    }
+          }
 	        if (*a)
         	{
-        		(*ini["server"])["multicast-address"] = a;
+        		(*ini["server"])["multicast-address6"] = a;
         		fprintf(stderr, "Server Addr: %s\n", a);
         	}
         }

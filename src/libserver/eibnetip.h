@@ -111,11 +111,12 @@ public:
   CArray data;
   /** source address */
   struct sockaddr_in src;
+  struct sockaddr_in6 src6;
 
   EIBNetIPPacket ();
   /** create from character array */
-  static EIBNetIPPacket *fromPacket (const CArray & c,
-				     const struct sockaddr_in src);
+  static EIBNetIPPacket *fromPacket (const CArray & c, const struct sockaddr_in src);
+  static EIBNetIPPacket *fromPacket (const CArray & c, const struct sockaddr_in6 src);
   /** convert to character array */
   CArray ToPacket () const;
   virtual ~EIBNetIPPacket ()
@@ -378,6 +379,8 @@ struct _EIBNetIP_Send
   EIBNetIPPacket data;
   /** destination address */
   struct sockaddr_in addr;
+  /** destination address */
+  struct sockaddr_in6 addr6;
 };
 
 /** EIBnet/IP socket */
@@ -410,6 +413,7 @@ private:
 
   /** multicast address */
   struct ip_mreq maddr;
+  struct ipv6_mreq maddr6;
   /** file descriptor */
   int fd;
   /** multicast in use? */
@@ -418,18 +422,23 @@ private:
 public:
   EIBNetIPSocket (struct sockaddr_in bindaddr, bool reuseaddr, TracePtr tr,
                   SockMode mode = S_RDWR);
+  EIBNetIPSocket (struct sockaddr_in6 bindaddr, bool reuseaddr, TracePtr tr,
+                  SockMode mode = S_RDWR);
   virtual ~EIBNetIPSocket ();
   bool init ();
   void stop();
 
   /** enables multicast */
   bool SetMulticast (struct ip_mreq multicastaddr);
+  bool SetMulticast (struct ipv6_mreq multicastaddr);
   /** sends a packet */
   void Send (EIBNetIPPacket p, struct sockaddr_in addr);
+  void Send (EIBNetIPPacket p, struct sockaddr_in6 addr);
   void Send (EIBNetIPPacket p) { Send (p, sendaddr); }
 
   /** get the port this socket is bound to (network byte order) */
   int port ();
+  int port6 ();
 
   bool SetInterface(std::string& iface);
 
@@ -442,6 +451,7 @@ public:
   struct sockaddr_in recvaddr2;
   /** address to NOT accept packets from, if 'recvall' is 2 */
   struct sockaddr_in localaddr;
+  struct sockaddr_in6 localaddr_ip6;
 
   void pause();
   void unpause();

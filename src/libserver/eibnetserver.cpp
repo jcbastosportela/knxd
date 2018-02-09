@@ -52,29 +52,38 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
   : SubDriver(c)
 {
   struct sockaddr_in baddr;
+  struct sockaddr_in6 baddr6;
   struct ip_mreq mcfg;
+  struct ipv6_mreq mcfg6;
+  bool bIPv4 = true;
+  bool bIPv6 = false;
   sock = 0;
   t->setAuxName("driver");
 
   TRACEPRINTF (t, 8, "OpenD");
 
   if (GetHostIP (t, &maddr, multicastaddr) == 0)
+  {
+    ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable. Trying IPv6", multicastaddr);
+    if (GetHostIP6 (t, &maddr6, multicastaddr) == 0)
     {
-      ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable. Trying IPv6", multicastaddr);
-	  if (GetHostIP6 (t, &maddr, multicastaddr) == 0)
-	  {
-	      ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable. Trying IPv6", multicastaddr);
-	      goto err_out;
-	  }
-	 }
+      ERRORPRINTF (t, E_ERROR | 11, "Addr '%s' not resolvable.", multicastaddr);
+      goto err_out;
+    }
+    bIPv6 = true;
+    bIPv4 = false;
+  }
 
-  if (port)
+  if( bIPv4 )
+  {
+    if (port)
     {
+      ERRORPRINTF (t, E_ERROR | 11, "IPv4 selected port '%d'", port);
       maddr.sin_port = htons (port);
       memset (&baddr, 0, sizeof (baddr));
-#ifdef HAVE_SOCKADDR_IN_LEN
+    #ifdef HAVE_SOCKADDR_IN_LEN
       baddr.sin_len = sizeof (baddr);
-#endif
+    #endif
       baddr.sin_family = AF_INET;
       baddr.sin_addr.s_addr = htonl (INADDR_ANY);
       baddr.sin_port = htons (port);
@@ -87,28 +96,71 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
       sock->on_recv.set<EIBnetDriver,&EIBnetDriver::recv_cb>(this);
       sock->on_error.set<EIBnetDriver,&EIBnetDriver::error_cb>(this);
     }
-  else
+    else
     {
       EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
       maddr.sin_port = parent.Port;
+      ERRORPRINTF (t, E_ERROR | 11, "IPv4 no selected port. Using %d", parent.Port);
       sock = parent.sock;
     }
 
-  mcfg.imr_multiaddr = maddr.sin_addr;
-  mcfg.imr_interface.s_addr = htonl (INADDR_ANY);
-  if (!sock->SetMulticast (mcfg))
-    goto err_out;
+    mcfg.imr_multiaddr = maddr.sin_addr;
+    mcfg.imr_interface.s_addr = htonl (INADDR_ANY);
+    if (!sock->SetMulticast (mcfg))
+      goto err_out;
 
-  /** This causes us to ignore multicast packets sent by ourselves */
-  if (!GetSourceAddress (t, &maddr, &sock->localaddr))
-    goto err_out;
-  sock->localaddr.sin_port = std::static_pointer_cast<EIBnetServer>(server)->Port;
-  sock->recvall = 2;
+    /** This causes us to ignore multicast packets sent by ourselves */
+    if (!GetSourceAddress (t, &maddr, &sock->localaddr))
+      goto err_out;
+    sock->localaddr.sin_port = std::static_pointer_cast<EIBnetServer>(server)->Port;
+    sock->recvall = 2;
+  }
+  else if( bIPv6 )
+  {
+    if (port)
+    {
+      ERRORPRINTF (t, E_ERROR | 11, "IPv6 selected port '%d'", port);
+      maddr6.sin6_port = htons (port);
+      memset (&baddr6, 0, sizeof (baddr6));
+    #ifdef HAVE_SOCKADDR_IN_LEN
+      baddr6.sin6_len = sizeof (baddr6);
+    #endif
+      baddr6.sin6_family = AF_INET6;
+      baddr6.sin6_addr = in6addr_any;
+      baddr6.sin6_port = htons (port);
 
+      sock = new EIBNetIPSocket (baddr6, 1, t);
+      if (!sock->SetInterface(intf))
+        goto err_out;
+      if (!sock->init ())
+        goto err_out;
+      sock->on_recv.set<EIBnetDriver,&EIBnetDriver::recv_cb>(this);
+      sock->on_error.set<EIBnetDriver,&EIBnetDriver::error_cb>(this);
+    }
+    else
+    {
+      EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
+      ERRORPRINTF (t, E_ERROR | 11, "IPv6 no selected port. Using %d", parent.Port);
+      maddr6.sin6_port = parent.Port;
+      sock = parent.sock;
+    }
+
+    mcfg6.ipv6mr_multiaddr = maddr6.sin6_addr;
+    mcfg6.ipv6mr_interface = 0;
+    if (!sock->SetMulticast (mcfg6))
+      goto err_out;
+
+    /** This causes us to ignore multicast packets sent by ourselves */
+    if (!GetSourceAddress6 (t, &maddr6, &sock->localaddr_ip6))
+      goto err_out;
+    sock->localaddr_ip6.sin6_port = std::static_pointer_cast<EIBnetServer>(server)->Port;
+    sock->recvall = 2;
+  }
   TRACEPRINTF (t, 8, "OpenedD");
   return;
 
 err_out:
+  ERRORPRINTF (t, E_ERROR | 11, "Error in EIBnetDriver");
   if (sock && port)
     delete (sock);
   sock = 0;
@@ -149,6 +201,8 @@ EIBnetServer::setup()
 //                     const bool tunnel, const bool route,
 //                     const bool discover, const bool single_port)
 {
+
+  ERRORPRINTF (t, E_ERROR | 11, "EIBnetServer::setup()");
   if(!Server::setup())
     return false;
   route = router_cfg->name.size() > 0;
@@ -156,10 +210,12 @@ EIBnetServer::setup()
   discover = cfg->value("discover",false);
   single_port = !cfg->value("multi-port",false);
   multicastaddr = cfg->value("multicast-address","224.0.23.12");
+  multicastaddr6 = cfg->value("multicast-address6","\0");
   port = cfg->value("port",3671);
+  port6 = cfg->value("port6",4242);
   interface = cfg->value("interface","");
   servername = cfg->value("name", dynamic_cast<Router *>(&router)->servername);
-
+  bIPv6 = multicastaddr6.length()>0;
   if (tunnel)
     {
       /* Check that we have client addresses. */
@@ -182,54 +238,121 @@ EIBnetServer::setup()
 void
 EIBnetServer::start()
 {
-  struct sockaddr_in baddr;
-  LinkConnectClientPtr mcast_conn;
-
-  TRACEPRINTF (t, 8, "Open");
-
-  sock_mac = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-  if (sock_mac < 0)
+  if( bIPv6 )
   {
-    ERRORPRINTF (t, E_ERROR | 27, "Lookup socket creation failed");
-    goto err_out0;
-  }
-  memset (&baddr, 0, sizeof (baddr));
-#ifdef HAVE_SOCKADDR_IN_LEN
-  baddr.sin_len = sizeof (baddr);
-#endif
-  baddr.sin_family = AF_INET;
-  baddr.sin_addr.s_addr = htonl (INADDR_ANY);
-  baddr.sin_port = single_port ? htons(port) : 0;
+    ERRORPRINTF (t, E_ERROR | 11, "EIBnetServer::start() ipv6");
+    struct sockaddr_in6 baddr6;
+    LinkConnectClientPtr mcast_conn6;
 
-  sock = new EIBNetIPSocket (baddr, 1, t);
-  if (!sock)
+    TRACEPRINTF (t, 8, "Open ipv6 mode");
+    
+    sock_mac6 = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (sock_mac6 < 0)
+    {
+      ERRORPRINTF (t, E_ERROR | 27, "Lookup socket ipv6 creation failed");
+      goto err_out0;
+    }
+    memset (&baddr6, 0, sizeof (baddr6));
+  #ifdef HAVE_SOCKADDR_IN_LEN
+    baddr6.sin6_len = sizeof (baddr6);
+  #endif
+    baddr6.sin6_family = AF_INET6;
+    baddr6.sin6_addr = in6addr_any;
+    baddr6.sin6_port = single_port ? htons(port6) : 0;
+
+    sock = new EIBNetIPSocket (baddr6, 1, t);
+    if (!sock)
+    {
+      ERRORPRINTF (t, E_ERROR | 41, "EIBNetIPSocket ipv6 creation failed");
+      goto err_out1;
+    }
+    sock->SetInterface(interface);
+
+    if (!sock->init ())
+    {
+      ERRORPRINTF (t, E_ERROR | 11, "EIBnetServer::start() sock->init failed!");
+      goto err_out2;
+    }
+    
+    sock->on_recv.set<EIBnetServer,&EIBnetServer::recv_cb>(this);
+    sock->on_error.set<EIBnetServer,&EIBnetServer::error_cb>(this);
+    sock->recvall = 1;
+    ERRORPRINTF (t, E_ERROR | 27, "---->");
+    Port = sock->port6 ();
+    ERRORPRINTF (t, E_ERROR | 27, "Port: %d", Port);
+    mcast_conn6 = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnetServer>(shared_from_this()), router_cfg, t));
+    mcast6 = EIBnetDriverPtr(new EIBnetDriver (mcast_conn6, multicastaddr6, single_port ? 0 : port6, interface));
+    if (!mcast6)
+    {
+      ERRORPRINTF (t, E_ERROR | 42, "EIBnetDriver ipv6 creation failed: !mcast6");
+      goto err_out2;
+    }
+    mcast_conn6->set_driver(mcast6);
+    if (!mcast_conn6->setup ())
+    {
+      ERRORPRINTF (t, E_ERROR | 42, "EIBnetDriver ipv6 creation failed: (!mcast_conn6->setup ()");
+      goto err_out3;
+    }
+    if (route && !static_cast<Router &>(router).registerLink(mcast_conn6))
+    {
+      ERRORPRINTF (t, E_ERROR | 42, "EIBnetDriver ipv6 creation failed: (route && !static_cast<Router &>(router).registerLink(mcast_conn6)");
+      goto err_out3;
+    }
+    ERRORPRINTF (t, E_ERROR | 27, "<----");
+  }
+  else /* IPv4 */
   {
-    ERRORPRINTF (t, E_ERROR | 41, "EIBNetIPSocket creation failed");
-    goto err_out1;
-  }
-  sock->SetInterface(interface);
+    struct sockaddr_in baddr;
+    LinkConnectClientPtr mcast_conn;
 
-  if (!sock->init ())
-    goto err_out2;
+    TRACEPRINTF (t, 8, "Open");
 
-  sock->on_recv.set<EIBnetServer,&EIBnetServer::recv_cb>(this);
-  sock->on_error.set<EIBnetServer,&EIBnetServer::error_cb>(this);
+    sock_mac = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if (sock_mac < 0)
+    {
+      ERRORPRINTF (t, E_ERROR | 27, "Lookup socket creation failed");
+      goto err_out0;
+    }
+    memset (&baddr, 0, sizeof (baddr));
+  #ifdef HAVE_SOCKADDR_IN_LEN
+    baddr.sin_len = sizeof (baddr);
+  #endif
+    baddr.sin_family = AF_INET;
+    baddr.sin_addr.s_addr = htonl (INADDR_ANY);
+    baddr.sin_port = single_port ? htons(port) : 0;
 
-  sock->recvall = 1;
-  Port = sock->port ();
+    sock = new EIBNetIPSocket (baddr, 1, t);
+    if (!sock)
+    {
+      ERRORPRINTF (t, E_ERROR | 41, "EIBNetIPSocket creation failed");
+      goto err_out1;
+    }
+    sock->SetInterface(interface);
 
-  mcast_conn = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnetServer>(shared_from_this()), router_cfg, t));
-  mcast = EIBnetDriverPtr(new EIBnetDriver (mcast_conn, multicastaddr, single_port ? 0 : port, interface));
-  if (!mcast)
+    if (!sock->init ())
+      goto err_out2;
+
+    sock->on_recv.set<EIBnetServer,&EIBnetServer::recv_cb>(this);
+    sock->on_error.set<EIBnetServer,&EIBnetServer::error_cb>(this);
+
+    sock->recvall = 1;
+    Port = sock->port ();
+
+    mcast_conn = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnetServer>(shared_from_this()), router_cfg, t));
+    mcast = EIBnetDriverPtr(new EIBnetDriver (mcast_conn, multicastaddr, single_port ? 0 : port, interface));
+    if (!mcast)
     {
       ERRORPRINTF (t, E_ERROR | 42, "EIBnetDriver creation failed");
       goto err_out2;
     }
-  mcast_conn->set_driver(mcast);
-  if (!mcast_conn->setup ())
-    goto err_out3;
-  if (route && !static_cast<Router &>(router).registerLink(mcast_conn))
-    goto err_out3;
+    mcast_conn->set_driver(mcast);
+    if (!mcast_conn->setup ())
+    {
+      goto err_out3;
+    }
+    if (route && !static_cast<Router &>(router).registerLink(mcast_conn))
+      goto err_out3;
+  }
 
   TRACEPRINTF (t, 8, "Opened");
 

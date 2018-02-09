@@ -114,18 +114,25 @@ SERVER(EIBnetServer,ets_router)
   friend class EIBnetDriver;
 
   EIBnetDriverPtr mcast;   // used for multicast receiving
+  EIBnetDriverPtr mcast6;   // used for multicast receiving
   EIBNetIPSocket *sock;  // used for normal dialog
+  EIBNetIPSocket *sock6;  // used for normal dialog
 
   int sock_mac;          // used to query the list of interfaces
+  int sock_mac6;          // used to query the list of interfaces
   int Port;              // copy of sock->port()
+  int Port6;              // copy of sock->port()
 
   /** config */
+  bool bIPv6;
   bool tunnel;
   bool route;
   bool discover;
   bool single_port;
   std::string multicastaddr;
+  std::string multicastaddr6;
   uint16_t port;
+  uint16_t port6;
   std::string interface;
   std::string servername;
   IniSectionPtr router_cfg;
@@ -154,10 +161,22 @@ public:
   void drop_connection (ConnStatePtr s);
   ev::async drop_trigger; void drop_trigger_cb(ev::async &w, int revents);
 
-  inline void Send (EIBNetIPPacket p) {
-    Send (p, mcast->maddr);
+  inline void Send (EIBNetIPPacket p)
+  {
+    if( mcast )
+    {
+      Send (p, mcast->maddr);
+    }
+    if( mcast6 )
+    {
+      Send (p, mcast6->maddr6);
+    }
   }
   inline void Send (EIBNetIPPacket p, struct sockaddr_in addr) {
+    if (sock)
+      sock->Send (p, addr);
+  }
+  inline void Send (EIBNetIPPacket p, struct sockaddr_in6 addr) {
     if (sock)
       sock->Send (p, addr);
   }

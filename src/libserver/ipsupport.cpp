@@ -46,40 +46,73 @@
 //#include <netdb.h>
 
 bool
-GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& _name)
+GetHostIP6 (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
 {
-	std::string name;
-	struct hostent *h;
+  int sockfd;  
+  struct addrinfo hints, *servinfo, *p;
+  struct sockaddr_in *h;
+  int rv;
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC; // use AF_INET6 to force IPv6
+  hints.ai_socktype = SOCK_STREAM;
+
+  if ( (rv = getaddrinfo( name.c_str() , "0" , &hints , &servinfo)) != 0) 
+  {
+      fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+      return false;
+  }
+
+  // loop through all the results and connect to the first we can
+  for(p = servinfo; p != NULL; p = p->ai_next) 
+  {
+    switch( p->ai_family )
+    {
+      case AF_UNSPEC:
+        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: Family unspecified\n", name);
+        break;
+      
+      case AF_INET:
+        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s Success: IPv4\n", name);
+
+        break;
+
+      case AF_INET6:
+        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s Success: IPv6\n", name);
+        memcpy( sock, (p->ai_addr), sizeof(struct sockaddr_in6) );
+        break;
+    }
+  }
+    
+  freeaddrinfo(servinfo); // all done with this structure
+//	std::string name;
+//	struct hostent *h;
 //	struct ifaddrs *myaddrs, *ifa;
 //	void *in_addr;
 //	char buf[64];
-
-	name.assign(_name);
+/*
 	if (name.size() == 0)
 	{
 		return false;
 	}
 	memset (sock, 0, sizeof (*sock));
-	/* remove the [] from ipv6 */
-	name.erase(std::remove(name.begin(), name.end(), '['), name.end());
-	name.erase(std::remove(name.begin(), name.end(), ']'), name.end());
 	fprintf(stderr, "name : %s\n", name.c_str());
 
 	h = gethostbyname2 (name.c_str(), AF_INET6);
 	if (!h)
+  {
+    if (t)
     {
-    	if (t)
-    	{
-    		ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: %s", name, hstrerror(h_errno));
-    	}
-    	return false;
+      ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: %s", name, hstrerror(h_errno));
     }
+    return false;
+  }
 #ifdef HAVE_SOCKADDR_IN_LEN
 	sock->sin6_len = sizeof (*sock);
 #endif
 	sock->sin6_family = h->h_addrtype;
-	//sock->sin6_addr = (*((unsigned long *) h->h_addr_list[0]));
-
+	//sock->sin6_addr = h->h_addr_list[0]));
+*/
 	/*
 	if(getifaddrs(&myaddrs) != 0)
 	{
@@ -182,6 +215,55 @@ GetSourceAddress (TracePtr t UNUSED, const struct sockaddr_in *dest, struct sock
 	{
 	  src->sin_family = AF_INET;
 	  memcpy (&src->sin_addr.s_addr, RTA_DATA (a), RTA_PAYLOAD (a));
+	  return 1;
+	}
+      a = RTA_NEXT (a, l);
+    }
+  return 0;
+err_out:
+  close (s);
+  return 0;
+}
+
+bool
+GetSourceAddress6 (TracePtr t UNUSED, const struct sockaddr_in6 *dest, struct sockaddr_in6 *src)
+{
+  int s;
+  int l;
+  r_req req;
+  struct rtattr *a;
+  memset (&req, 0, sizeof (req));
+  memset (src, 0, sizeof (*src));
+  s = socket (PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+  if (s == -1)
+    return 0;
+  req.n.nlmsg_len =
+    NLMSG_SPACE (sizeof (req.r)) +
+    RTA_LENGTH (sizeof (dest->sin6_addr));
+  req.n.nlmsg_flags = NLM_F_REQUEST;
+  req.n.nlmsg_type = RTM_GETROUTE;
+  req.r.rtm_family = AF_INET6;
+  req.r.rtm_dst_len = 32;
+  a = (rtattr *) ((char *) &req + NLMSG_SPACE (sizeof (req.r)));
+  a->rta_type = RTA_DST;
+  a->rta_len = RTA_LENGTH (sizeof (dest->sin6_addr));
+  memcpy (RTA_DATA (a), &dest->sin6_addr,
+	  sizeof (dest->sin6_addr));
+  if (write (s, &req, req.n.nlmsg_len) < 0)
+    goto err_out;
+  if (read (s, &req, sizeof (req)) < 0)
+    goto err_out;
+  close (s);
+  if (req.n.nlmsg_type == NLMSG_ERROR)
+    return 0;
+  l = ((struct nlmsghdr *) &req)->nlmsg_len;
+  while (RTA_OK (a, l))
+    {
+      if (a->rta_type == RTA_PREFSRC
+	  && RTA_PAYLOAD (a) == sizeof (src->sin6_addr))
+	{
+	  src->sin6_family = AF_INET6;
+	  memcpy (&src->sin6_addr, RTA_DATA (a), RTA_PAYLOAD (a));
 	  return 1;
 	}
       a = RTA_NEXT (a, l);

@@ -68,18 +68,18 @@ GetHostIP (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
     switch( p->ai_family )
     {
       case AF_UNSPEC:
-        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: Family unspecified\n", name);
+        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: Family unspecified", name);
         // TODO: handle. For now we just fail
         return false;
         break;
       
       case AF_INET:
-        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s Success: IPv4\n", name);
+        TRACEPRINTF (t, 8, "Resolving %s Success: IPv4", name);
         // TODO: implement something, potentially use this function for IPv4 as well and deprecate GetHostIP (TracePtr t, struct sockaddr_in *sock, const std::string& name)
         break;
 
       case AF_INET6:
-        ERRORPRINTF (t, E_ERROR | 50, "Resolving %s Success: IPv6\n", name);
+        TRACEPRINTF (t, 8, "Resolving %s Success: IPv6", name);
         memcpy( sock, (p->ai_addr), sizeof(struct sockaddr_in6) );
         break;
     }
@@ -104,7 +104,7 @@ GetHostIP (TracePtr t, struct sockaddr_in *sock, const std::string& name)
     {
     	if (t)
     	{
-    		ERRORPRINTF (t, E_ERROR | 50, "Resolving %s failed: %s", name, hstrerror(h_errno));
+    		TRACEPRINTF (t, 8, "Resolving %s failed: %s", name, hstrerror(h_errno));
     	}
     	return false;
     }
@@ -113,7 +113,7 @@ GetHostIP (TracePtr t, struct sockaddr_in *sock, const std::string& name)
 #endif
 	sock->sin_family = h->h_addrtype;
 	sock->sin_addr.s_addr = (*((unsigned long *) h->h_addr_list[0]));
-
+  TRACEPRINTF (t, 8, "Resolving %s Success: IPv4", name);
 	return true;
 }
 

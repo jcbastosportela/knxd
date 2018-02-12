@@ -24,7 +24,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <netdb.h>
-#include "eibnetip.h"
+#include "eibnetip6.h"
 #include "config.h"
 
 EIBNetIPPacket::EIBNetIPPacket ()

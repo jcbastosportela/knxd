@@ -101,7 +101,7 @@ typedef enum {
 } SockMode;
 
 /** represents a EIBnet/IP packet */
-class EIBNetIPPacket
+class EIBNet6IPPacket
 {
 
 public:
@@ -110,148 +110,148 @@ public:
   /** payload */
   CArray data;
   /** source address */
-  struct sockaddr_in src;
+  struct sockaddr_in6 src;
 
-  EIBNetIPPacket ();
+  EIBNet6IPPacket ();
   /** create from character array */
-  static EIBNetIPPacket *fromPacket (const CArray & c,
-				     const struct sockaddr_in src);
+  static EIBNet6IPPacket *fromPacket (const CArray & c,
+				     const struct sockaddr_in6 src);
   /** convert to character array */
   CArray ToPacket () const;
-  virtual ~EIBNetIPPacket ()
+  virtual ~EIBNet6IPPacket ()
   {
   }
 };
 
-class EIBnet_ConnectRequest
+class EIBnet6_ConnectRequest
 {
 public:
-  EIBnet_ConnectRequest ();
-  struct sockaddr_in caddr;
-  struct sockaddr_in daddr;
+  EIBnet6_ConnectRequest ();
+  struct sockaddr_in6 caddr;
+  struct sockaddr_in6 daddr;
   CArray CRI;
   bool nat;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_ConnectRequest (const EIBNetIPPacket & p,
-				EIBnet_ConnectRequest & r);
+int parseEIBnet6_ConnectRequest (const EIBNet6IPPacket & p,
+				EIBnet6_ConnectRequest & r);
 
-class EIBnet_ConnectResponse
+class EIBnet6_ConnectResponse
 {
 public:
-  EIBnet_ConnectResponse ();
+  EIBnet6_ConnectResponse ();
   uchar channel;
   uchar status;
-  struct sockaddr_in daddr;
+  struct sockaddr_in6 daddr;
   bool nat;
   CArray CRD;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_ConnectResponse (const EIBNetIPPacket & p,
-				 EIBnet_ConnectResponse & r);
+int parseEIBnet6_ConnectResponse (const EIBNet6IPPacket & p,
+				 EIBnet6_ConnectResponse & r);
 
-class EIBnet_ConnectionStateRequest
+class EIBnet6_ConnectionStateRequest
 {
 public:
-  EIBnet_ConnectionStateRequest ();
+  EIBnet6_ConnectionStateRequest ();
   uchar channel;
   uchar status;
-  struct sockaddr_in caddr;
+  struct sockaddr_in6 caddr;
   bool nat;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_ConnectionStateRequest (const EIBNetIPPacket & p,
-					EIBnet_ConnectionStateRequest & r);
+int parseEIBnet6_ConnectionStateRequest (const EIBNet6IPPacket & p,
+					EIBnet6_ConnectionStateRequest & r);
 
-class EIBnet_ConnectionStateResponse
+class EIBnet6_ConnectionStateResponse
 {
 public:
-  EIBnet_ConnectionStateResponse ();
+  EIBnet6_ConnectionStateResponse ();
   uchar channel;
   uchar status;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_ConnectionStateResponse (const EIBNetIPPacket & p,
-					 EIBnet_ConnectionStateResponse & r);
+int parseEIBnet6_ConnectionStateResponse (const EIBNet6IPPacket & p,
+					 EIBnet6_ConnectionStateResponse & r);
 
-class EIBnet_DisconnectRequest
+class EIBnet6_DisconnectRequest
 {
 public:
-  EIBnet_DisconnectRequest ();
-  struct sockaddr_in caddr;
+  EIBnet6_DisconnectRequest ();
+  struct sockaddr_in6 caddr;
   uchar channel;
   bool nat;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_DisconnectRequest (const EIBNetIPPacket & p,
-				   EIBnet_DisconnectRequest & r);
+int parseEIBnet6_DisconnectRequest (const EIBNet6IPPacket & p,
+				   EIBnet6_DisconnectRequest & r);
 
-class EIBnet_DisconnectResponse
+class EIBnet6_DisconnectResponse
 {
 public:
-  EIBnet_DisconnectResponse ();
+  EIBnet6_DisconnectResponse ();
   uchar channel;
   uchar status;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_DisconnectResponse (const EIBNetIPPacket & p,
-				    EIBnet_DisconnectResponse & r);
+int parseEIBnet6_DisconnectResponse (const EIBNet6IPPacket & p,
+				    EIBnet6_DisconnectResponse & r);
 
-class EIBnet_TunnelRequest
+class EIBnet6_TunnelRequest
 {
 public:
-  EIBnet_TunnelRequest ();
+  EIBnet6_TunnelRequest ();
   uchar channel;
   uchar seqno;
   CArray CEMI;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_TunnelRequest (const EIBNetIPPacket & p,
-			       EIBnet_TunnelRequest & r);
+int parseEIBnet6_TunnelRequest (const EIBNet6IPPacket & p,
+			       EIBnet6_TunnelRequest & r);
 
-class EIBnet_TunnelACK
+class EIBnet6_TunnelACK
 {
 public:
-  EIBnet_TunnelACK ();
+  EIBnet6_TunnelACK ();
   uchar channel;
   uchar seqno;
   uchar status;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_TunnelACK (const EIBNetIPPacket & p, EIBnet_TunnelACK & r);
+int parseEIBnet6_TunnelACK (const EIBNet6IPPacket & p, EIBnet6_TunnelACK & r);
 
-class EIBnet_ConfigRequest
+class EIBnet6_ConfigRequest
 {
 public:
-  EIBnet_ConfigRequest ();
+  EIBnet6_ConfigRequest ();
   uchar channel;
   uchar seqno;
   CArray CEMI;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_ConfigRequest (const EIBNetIPPacket & p,
-			       EIBnet_ConfigRequest & r);
+int parseEIBnet6_ConfigRequest (const EIBNet6IPPacket & p,
+			       EIBnet6_ConfigRequest & r);
 
-class EIBnet_ConfigACK
+class EIBnet6_ConfigACK
 {
 public:
-  EIBnet_ConfigACK ();
+  EIBnet6_ConfigACK ();
   uchar channel;
   uchar seqno;
   uchar status;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_ConfigACK (const EIBNetIPPacket & p, EIBnet_ConfigACK & r);
+int parseEIBnet6_ConfigACK (const EIBNet6IPPacket & p, EIBnet6_ConfigACK & r);
 
 typedef struct
 {
@@ -259,22 +259,22 @@ typedef struct
   uchar version;
 } DIB_service_Entry;
 
-class EIBnet_DescriptionRequest
+class EIBnet6_DescriptionRequest
 {
 public:
-  EIBnet_DescriptionRequest ();
-  struct sockaddr_in caddr;
+  EIBnet6_DescriptionRequest ();
+  struct sockaddr_in6 caddr;
   bool nat;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_DescriptionRequest (const EIBNetIPPacket & p,
-				    EIBnet_DescriptionRequest & r);
+int parseEIBnet6_DescriptionRequest (const EIBNet6IPPacket & p,
+				    EIBnet6_DescriptionRequest & r);
 
-class EIBnet_DescriptionResponse
+class EIBnet6_DescriptionResponse
 {
 public:
-  EIBnet_DescriptionResponse ();
+  EIBnet6_DescriptionResponse ();
   uchar KNXmedium;
   uchar devicestatus;
   eibaddr_t individual_addr;
@@ -285,28 +285,28 @@ public:
   uchar MAC[6];
   uchar name[30];
   CArray optional;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_DescriptionResponse (const EIBNetIPPacket & p,
-				     EIBnet_DescriptionResponse & r);
+int parseEIBnet6_DescriptionResponse (const EIBNet6IPPacket & p,
+				     EIBnet6_DescriptionResponse & r);
 
-class EIBnet_SearchRequest
+class EIBnet6_SearchRequest
 {
 public:
-  EIBnet_SearchRequest ();
-  struct sockaddr_in caddr;
+  EIBnet6_SearchRequest ();
+  struct sockaddr_in6 caddr;
   bool nat;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_SearchRequest (const EIBNetIPPacket & p,
-			       EIBnet_SearchRequest & r);
+int parseEIBnet6_SearchRequest (const EIBNet6IPPacket & p,
+			       EIBnet6_SearchRequest & r);
 
-class EIBnet_SearchResponse
+class EIBnet6_SearchResponse
 {
 public:
-  EIBnet_SearchResponse ();
+  EIBnet6_SearchResponse ();
   uchar KNXmedium;
   uchar devicestatus;
   eibaddr_t individual_addr;
@@ -316,17 +316,17 @@ public:
   struct in_addr multicastaddr;
   uchar MAC[6];
   uchar name[30];
-  struct sockaddr_in caddr;
+  struct sockaddr_in6 caddr;
   bool nat = false;
-  EIBNetIPPacket ToPacket () const;
+  EIBNet6IPPacket ToPacket () const;
 };
 
-int parseEIBnet_SearchResponse (const EIBNetIPPacket & p,
-				EIBnet_SearchResponse & r);
+int parseEIBnet6_SearchResponse (const EIBNet6IPPacket & p,
+				EIBnet6_SearchResponse & r);
 
 
 
-typedef void (*eibpacket_cb_t)(void *data, EIBNetIPPacket *p);
+typedef void (*eibpacket_cb_t)(void *data, EIBNet6IPPacket *p);
 
 class EIBPacketCallback {
     eibpacket_cb_t cb_code = 0;
@@ -340,48 +340,48 @@ class EIBPacketCallback {
 
 public:
     // function callback
-    template<void (*function)(EIBNetIPPacket *p)>
+    template<void (*function)(EIBNet6IPPacket *p)>
     void set (void *data = 0) throw ()
     {
       set_ (data, function_thunk<function>);
     }
 
-    template<void (*function)(EIBNetIPPacket *p)>
-    static void function_thunk (void *arg, EIBNetIPPacket *p)
+    template<void (*function)(EIBNet6IPPacket *p)>
+    static void function_thunk (void *arg, EIBNet6IPPacket *p)
     {
       function(p);
     }
 
     // method callback
-    template<class K, void (K::*method)(EIBNetIPPacket *p)>
+    template<class K, void (K::*method)(EIBNet6IPPacket *p)>
     void set (K *object)
     {
       set_ (object, method_thunk<K, method>);
     }
 
-    template<class K, void (K::*method)(EIBNetIPPacket *p)>
-    static void method_thunk (void *arg, EIBNetIPPacket *p)
+    template<class K, void (K::*method)(EIBNet6IPPacket *p)>
+    static void method_thunk (void *arg, EIBNet6IPPacket *p)
     {
       (static_cast<K *>(arg)->*method) (p);
     }
 
-    void operator()(EIBNetIPPacket *p) {
+    void operator()(EIBNet6IPPacket *p) {
         (*cb_code)(cb_data, p);
     }
 };
 
 
 /** represents a EIBnet/IP packet to send*/
-struct _EIBNetIP_Send
+struct _EIBNet6IP_Send
 {
   /** packat */
-  EIBNetIPPacket data;
+  EIBNet6IPPacket data;
   /** destination address */
-  struct sockaddr_in addr;
+  struct sockaddr_in6 addr;
 };
 
 /** EIBnet/IP socket */
-class EIBNetIPSocket
+class EIBNet6IPSocket
 {
   /** debug output */
   TracePtr t;
@@ -396,7 +396,7 @@ public:
   InfoCallback on_error;
   InfoCallback on_next;
 private:
-  void recv_cb(EIBNetIPPacket *p)
+  void recv_cb(EIBNet6IPPacket *p)
     {
       t->TracePacket (0, "Drop", p->data);
       delete p;
@@ -405,7 +405,7 @@ private:
   void next_cb() { }
 
   /** output queue */
-  Queue < struct _EIBNetIP_Send > send_q;
+  Queue < struct _EIBNet6IP_Send > send_q;
   void send_q_drop();
 
   /** multicast address */
@@ -416,17 +416,17 @@ private:
   bool multicast;
 
 public:
-  EIBNetIPSocket (struct sockaddr_in bindaddr, bool reuseaddr, TracePtr tr,
+  EIBNet6IPSocket (struct sockaddr_in6 bindaddr, bool reuseaddr, TracePtr tr,
                   SockMode mode = S_RDWR);
-  virtual ~EIBNetIPSocket ();
+  virtual ~EIBNet6IPSocket ();
   bool init ();
   void stop();
 
   /** enables multicast */
   bool SetMulticast (struct ip_mreq multicastaddr);
   /** sends a packet */
-  void Send (EIBNetIPPacket p, struct sockaddr_in addr);
-  void Send (EIBNetIPPacket p) { Send (p, sendaddr); }
+  void Send (EIBNet6IPPacket p, struct sockaddr_in6 addr);
+  void Send (EIBNet6IPPacket p) { Send (p, sendaddr); }
 
   /** get the port this socket is bound to (network byte order) */
   int port ();
@@ -434,14 +434,14 @@ public:
   bool SetInterface(std::string& iface);
 
   /** default send address */
-  struct sockaddr_in sendaddr;
+  struct sockaddr_in6 sendaddr;
 
   /** address to accept packets from, if recvall is 0 */
-  struct sockaddr_in recvaddr;
+  struct sockaddr_in6 recvaddr;
   /** address to also accept packets from, if 'recvall' is 3 */
-  struct sockaddr_in recvaddr2;
+  struct sockaddr_in6 recvaddr2;
   /** address to NOT accept packets from, if 'recvall' is 2 */
-  struct sockaddr_in localaddr;
+  struct sockaddr_in6 localaddr;
 
   void pause();
   void unpause();

@@ -17,19 +17,19 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
-#ifndef EIBNET_SERVER_H
-#define EIBNET_SERVER_H
+#ifndef EIBNET6_SERVER_H
+#define EIBNET6_SERVER_H
 
 #include <ev++.h>
 #include "callbacks.h"
-#include "eibnetip.h"
+#include "eibnetip6.h"
 #include "link.h"
 #include "server.h"
 #include "lpdu.h"
 
 
-class EIBnetServer;
-typedef std::shared_ptr<EIBnetServer> EIBnetServerPtr;
+class EIBnet6Server;
+typedef std::shared_ptr<EIBnet6Server> EIBnet6ServerPtr;
 
 typedef enum {
 	CT_NONE = 0,
@@ -40,16 +40,16 @@ typedef enum {
 
 
 /** Driver for tunnels */
-class ConnState: public SubDriver, public L_Busmonitor_CallBack
+class ConnState_ipv6: public SubDriver, public L_Busmonitor_CallBack
 {
 public:
-  ConnState (LinkConnectClientPtr c, eibaddr_t addr);
-  virtual ~ConnState ();
+  ConnState_ipv6 (LinkConnectClientPtr c, eibaddr_t addr);
+  virtual ~ConnState_ipv6 ();
   bool setup();
   // void start();
   void stop();
 
-  EIBnetServer *parent;
+  EIBnet6Server *parent;
 
   eibaddr_t addr;
   uchar channel;
@@ -67,23 +67,23 @@ public:
   Queue < CArray > out;
   void reset_timer();
 
-  struct sockaddr_in daddr;
-  struct sockaddr_in caddr;
+  struct sockaddr_in6 daddr;
+  struct sockaddr_in6 caddr;
 
   // handle various packets from the connection
-  void tunnel_request(EIBnet_TunnelRequest &r1, EIBNetIPSocket *isock);
-  void tunnel_response(EIBnet_TunnelACK &r1);
-  void config_request(EIBnet_ConfigRequest &r1, EIBNetIPSocket *isock);
-  void config_response (EIBnet_ConfigACK &r1);
+  void tunnel_request(EIBnet6_TunnelRequest &r1, EIBNetIPSocket *isock);
+  void tunnel_response(EIBnet6_TunnelACK &r1);
+  void config_request(EIBnet6_ConfigRequest &r1, EIBNetIPSocket *isock);
+  void config_response (EIBnet6_ConfigACK &r1);
 
   void send_L_Data (LDataPtr l);
   void send_L_Busmonitor (LBusmonPtr l);
 };
-typedef std::shared_ptr<ConnState> ConnStatePtr;
+typedef std::shared_ptr<ConnState_ipv6> ConnState_ipv6Ptr;
 
 
 /** Driver for routing */
-class EIBnetDriver : public SubDriver
+class EIBnet6Driver : public SubDriver
 {
   EIBNetIPSocket *sock; // receive only
 
@@ -92,27 +92,27 @@ class EIBnetDriver : public SubDriver
   void error_cb();
 
 public:
-  EIBnetDriver (LinkConnectClientPtr c, std::string& multicastaddr, int port, std::string& intf);
-  virtual ~EIBnetDriver ();
-  struct sockaddr_in maddr;
+  EIBnet6Driver (LinkConnectClientPtr c, std::string& multicastaddr, int port, std::string& intf);
+  virtual ~EIBnet6Driver ();
+  struct sockaddr_in6 maddr;
 
   bool setup();
   // void start();
   // void stop();
 
-  void Send (EIBNetIPPacket p, struct sockaddr_in addr);
+  void Send (EIBNetIPPacket p, struct sockaddr_in6 addr);
 
   void send_L_Data (LDataPtr l);
 };
 
-typedef std::shared_ptr<EIBnetDriver> EIBnetDriverPtr;
+typedef std::shared_ptr<EIBnet6Driver> EIBnet6DriverPtr;
 
-SERVER(EIBnetServer,ets_router)
+SERVER(EIBnet6Server,ets_router6)
 {
-  friend class ConnState;
-  friend class EIBnetDriver;
+  friend class ConnState_ipv6_ipv6;
+  friend class EIBnet6Driver;
 
-  EIBnetDriverPtr mcast;   // used for multicast receiving
+  EIBnet6DriverPtr mcast;   // used for multicast receiving
   EIBNetIPSocket *sock;  // used for normal dialog
 
   int sock_mac;          // used to query the list of interfaces
@@ -130,10 +130,10 @@ SERVER(EIBnetServer,ets_router)
   IniSectionPtr router_cfg;
   IniSectionPtr tunnel_cfg;
 
-  Array < ConnStatePtr > connections;
-  Queue < ConnStatePtr > drop_q;
+  Array < ConnState_ipv6Ptr > connections;
+  Queue < ConnState_ipv6Ptr > drop_q;
 
-  int addClient (ConnType type, const EIBnet_ConnectRequest & r1,
+  int addClient (ConnType type, const EIBnet6_ConnectRequest & r1,
                  eibaddr_t addr = 0);
   void addNAT (const LDataPtr &&l);
 
@@ -142,15 +142,15 @@ SERVER(EIBnetServer,ets_router)
 
   void stop_();
 public:
-  EIBnetServer (BaseRouter& r, IniSectionPtr& s);
-  virtual ~EIBnetServer ();
+  EIBnet6Server (BaseRouter& r, IniSectionPtr& s);
+  virtual ~EIBnet6Server ();
   bool setup ();
   void start();
   void stop();
 
   void handle_packet (EIBNetIPPacket *p1, EIBNetIPSocket *isock);
 
-  void drop_connection (ConnStatePtr s);
+  void drop_connection (ConnState_ipv6Ptr s);
   ev::async drop_trigger; void drop_trigger_cb(ev::async &w, int revents);
 
   inline void Send (EIBNetIPPacket p) {
@@ -164,6 +164,6 @@ public:
   bool checkAddress(eibaddr_t addr UNUSED) { return route; }
   bool checkGroupAddress(eibaddr_t addr UNUSED) { return route; }
 };
-typedef std::shared_ptr<EIBnetServer> EIBnetServerPtr;
+typedef std::shared_ptr<EIBnet6Server> EIBnet6ServerPtr;
 
 #endif

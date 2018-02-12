@@ -79,7 +79,7 @@ GetHostIP (TracePtr t, struct sockaddr_in6 *sock, const std::string& name)
         break;
 
       case AF_INET6:
-        TRACEPRINTF (t, 8, "Resolving %s Success: IPv6", name);
+        TRACEPRINTF (t, 8, "Resolving %s Success: IPv6; %d", name, p->ai_family);
         memcpy( sock, (p->ai_addr), sizeof(struct sockaddr_in6) );
         break;
     }

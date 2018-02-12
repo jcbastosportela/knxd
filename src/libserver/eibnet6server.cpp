@@ -17,7 +17,7 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
-#include "eibnetserver.h"
+#include "eibnet6server.h"
 #include "emi.h"
 #include "config.h"
 #include <stdlib.h>
@@ -29,7 +29,7 @@
 #include <string.h>
 #include <memory>
 
-EIBnetServer::EIBnetServer (BaseRouter& r, IniSectionPtr& s)
+EIBnet6Server::EIBnet6Server (BaseRouter& r, IniSectionPtr& s)
 	: Server(r,s)
   , mcast(NULL)
   , sock(NULL)
@@ -42,16 +42,16 @@ EIBnetServer::EIBnetServer (BaseRouter& r, IniSectionPtr& s)
   , tunnel_cfg(s->sub("tunnel",false))
 {
   t->setAuxName("server");
-  drop_trigger.set<EIBnetServer,&EIBnetServer::drop_trigger_cb>(this);
+  drop_trigger.set<EIBnet6Server,&EIBnet6Server::drop_trigger_cb>(this);
   drop_trigger.start();
 }
 
-EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
+EIBnet6Driver::EIBnet6Driver (LinkConnectClientPtr c,
                             std::string& multicastaddr, int port, std::string& intf)
   : SubDriver(c)
 {
-  struct sockaddr_in baddr;
-  struct ip_mreq mcfg;
+  struct sockaddr_in6 baddr;
+  struct ipv6_mreq mcfg;
   sock = 0;
   t->setAuxName("driver");
 
@@ -65,31 +65,31 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
 
   if (port)
     {
-      maddr.sin_port = htons (port);
+      maddr.sin6_port = htons (port);
       memset (&baddr, 0, sizeof (baddr));
 #ifdef HAVE_SOCKADDR_IN_LEN
-      baddr.sin_len = sizeof (baddr);
+      baddr.sin6_len = sizeof (baddr);
 #endif
-      baddr.sin_family = AF_INET;
-      baddr.sin_addr.s_addr = htonl (INADDR_ANY);
-      baddr.sin_port = htons (port);
+      baddr.sin6_family = AF_INET6;
+      baddr.sin6_addr= in6addr_any;
+      baddr.sin6_port = htons (port);
 
-      sock = new EIBNetIPSocket (baddr, 1, t);
+      sock = new EIBNet6IPSocket (baddr, 1, t);
       if (!sock->SetInterface(intf))
         goto err_out;
       if (!sock->init ())
         goto err_out;
-      sock->on_recv.set<EIBnetDriver,&EIBnetDriver::recv_cb>(this);
-      sock->on_error.set<EIBnetDriver,&EIBnetDriver::error_cb>(this);
+      sock->on_recv.set<EIBnet6Driver,&EIBnet6Driver::recv_cb>(this);
+      sock->on_error.set<EIBnet6Driver,&EIBnet6Driver::error_cb>(this);
     }
   else
     {
-      EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
-      maddr.sin_port = parent.Port;
+      EIBnet6Server &parent = *std::static_pointer_cast<EIBnet6Server>(server);
+      maddr.sin6_port = parent.Port;
       sock = parent.sock;
     }
 
-  mcfg.imr_multiaddr = maddr.sin_addr;
+  mcfg.imr_multiaddr = maddr.sin6_addr;
   mcfg.imr_interface.s_addr = htonl (INADDR_ANY);
   if (!sock->SetMulticast (mcfg))
     goto err_out;
@@ -97,7 +97,7 @@ EIBnetDriver::EIBnetDriver (LinkConnectClientPtr c,
   /** This causes us to ignore multicast packets sent by ourselves */
   if (!GetSourceAddress (t, &maddr, &sock->localaddr))
     goto err_out;
-  sock->localaddr.sin_port = std::static_pointer_cast<EIBnetServer>(server)->Port;
+  sock->localaddr.sin6_port = std::static_pointer_cast<EIBnet6Server>(server)->Port;
   sock->recvall = 2;
 
   TRACEPRINTF (t, 8, "OpenedD");
@@ -111,7 +111,7 @@ err_out:
 }
 
 bool
-EIBnetDriver::setup()
+EIBnet6Driver::setup()
 {
   if (!assureFilter("pace"))
     return false;
@@ -123,23 +123,23 @@ EIBnetDriver::setup()
   return true;
 }
 
-EIBnetServer::~EIBnetServer ()
+EIBnet6Server::~EIBnet6Server ()
 {
   stop_();
   TRACEPRINTF (t, 8, "Close");
 }
 
-EIBnetDriver::~EIBnetDriver ()
+EIBnet6Driver::~EIBnet6Driver ()
 {
   TRACEPRINTF (t, 8, "CloseD");
-  EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
-  EIBNetIPSocket *ps = parent.sock;
+  EIBnet6Server &parent = *std::static_pointer_cast<EIBnet6Server>(server);
+  EIBNet6IPSocket *ps = parent.sock;
   if (sock && ps && ps != sock)
     delete sock;
 }
 
 bool
-EIBnetServer::setup()
+EIBnet6Server::setup()
 //(const char *multicastaddr, const int port, const char *intf,
 //                     const bool tunnel, const bool route,
 //                     const bool discover, const bool single_port)
@@ -150,7 +150,7 @@ EIBnetServer::setup()
   tunnel = tunnel_cfg->name.size() > 0;
   discover = cfg->value("discover",false);
   single_port = !cfg->value("multi-port",false);
-  multicastaddr = cfg->value("multicast-address","224.0.23.12");
+  multicastaddr = cfg->value("multicast-address","ff12::4242");
   port = cfg->value("port",3671);
   interface = cfg->value("interface","");
   servername = cfg->value("name", dynamic_cast<Router *>(&router)->servername);
@@ -175,14 +175,14 @@ EIBnetServer::setup()
 }
 
 void
-EIBnetServer::start()
+EIBnet6Server::start()
 {
-  struct sockaddr_in baddr;
+  struct sockaddr_in6 baddr;
   LinkConnectClientPtr mcast_conn;
 
   TRACEPRINTF (t, 8, "Open");
 
-  sock_mac = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+  sock_mac = socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP);
   if (sock_mac < 0)
   {
     ERRORPRINTF (t, E_ERROR | 27, "Lookup socket creation failed");
@@ -190,16 +190,16 @@ EIBnetServer::start()
   }
   memset (&baddr, 0, sizeof (baddr));
 #ifdef HAVE_SOCKADDR_IN_LEN
-  baddr.sin_len = sizeof (baddr);
+  baddr.sin6_len = sizeof (baddr);
 #endif
-  baddr.sin_family = AF_INET;
-  baddr.sin_addr.s_addr = htonl (INADDR_ANY);
-  baddr.sin_port = single_port ? htons(port) : 0;
+  baddr.sin6_family = AF_INET;
+  baddr.sin6_addr= in6addr_any;
+  baddr.sin6_port = single_port ? htons(port) : 0;
 
-  sock = new EIBNetIPSocket (baddr, 1, t);
+  sock = new EIBNet6IPSocket (baddr, 1, t);
   if (!sock)
   {
-    ERRORPRINTF (t, E_ERROR | 41, "EIBNetIPSocket creation failed");
+    ERRORPRINTF (t, E_ERROR | 41, "EIBNet6IPSocket creation failed");
     goto err_out1;
   }
   sock->SetInterface(interface);
@@ -207,17 +207,17 @@ EIBnetServer::start()
   if (!sock->init ())
     goto err_out2;
 
-  sock->on_recv.set<EIBnetServer,&EIBnetServer::recv_cb>(this);
-  sock->on_error.set<EIBnetServer,&EIBnetServer::error_cb>(this);
+  sock->on_recv.set<EIBnet6Server,&EIBnet6Server::recv_cb>(this);
+  sock->on_error.set<EIBnet6Server,&EIBnet6Server::error_cb>(this);
 
   sock->recvall = 1;
   Port = sock->port ();
 
-  mcast_conn = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnetServer>(shared_from_this()), router_cfg, t));
-  mcast = EIBnetDriverPtr(new EIBnetDriver (mcast_conn, multicastaddr, single_port ? 0 : port, interface));
+  mcast_conn = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnet6Server>(shared_from_this()), router_cfg, t));
+  mcast = EIBnet6DriverPtr(new EIBnet6Driver (mcast_conn, multicastaddr, single_port ? 0 : port, interface));
   if (!mcast)
     {
-      ERRORPRINTF (t, E_ERROR | 42, "EIBnetDriver creation failed");
+      ERRORPRINTF (t, E_ERROR | 42, "EIBnet6Driver creation failed");
       goto err_out2;
     }
   mcast_conn->set_driver(mcast);
@@ -243,19 +243,19 @@ err_out0:
   Server::stop();
 }
 
-void EIBnetDriver::Send (EIBNetIPPacket p, struct sockaddr_in addr)
+void EIBnet6Driver::Send (EIBNet6IPPacket p, struct sockaddr_in6 addr)
 {
   if (sock)
     sock->Send (p, addr);
 }
 
 void
-EIBnetDriver::send_L_Data (LDataPtr l)
+EIBnet6Driver::send_L_Data (LDataPtr l)
 {
-  EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
+  EIBnet6Server &parent = *std::static_pointer_cast<EIBnet6Server>(server);
   if (parent.route)
     {
-      EIBNetIPPacket p;
+      EIBNet6IPPacket p;
       p.service = ROUTING_INDICATION;
       p.data = L_Data_ToCEMI (0x29, l);
       parent.Send (p);
@@ -301,7 +301,7 @@ void ConnState::send_L_Data (LDataPtr l)
 }
 
 int
-EIBnetServer::addClient (ConnType type, const EIBnet_ConnectRequest & r1,
+EIBnet6Server::addClient (ConnType type, const EIBnet_ConnectRequest & r1,
                          eibaddr_t addr)
 {
   int id = 1;
@@ -314,7 +314,7 @@ rt:
       }
   if (id <= 0xff)
     {
-      LinkConnectClientPtr conn = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnetServer>(shared_from_this()), tunnel_cfg, t));
+      LinkConnectClientPtr conn = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnet6Server>(shared_from_this()), tunnel_cfg, t));
       ConnStatePtr s = ConnStatePtr(new ConnState(conn, addr));
       conn->set_driver(s);
       s->channel = id;
@@ -364,7 +364,7 @@ void ConnState::send_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
 {
   if (out.isempty ())
     return;
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   if (type == CT_CONFIG)
     {
       EIBnet_ConfigRequest r;
@@ -383,7 +383,7 @@ void ConnState::send_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
     }
   retries ++;
   sendtimeout.start(TUNNELING_REQUEST_TIMEOUT,0);
-  std::static_pointer_cast<EIBnetServer>(server)->mcast->Send (p, daddr);
+  std::static_pointer_cast<EIBnet6Server>(server)->mcast->Send (p, daddr);
 }
 
 void ConnState::timeout_cb(ev::timer &w UNUSED, int revents UNUSED)
@@ -394,9 +394,9 @@ void ConnState::timeout_cb(ev::timer &w UNUSED, int revents UNUSED)
       r.channel = channel;
       if (GetSourceAddress (t, &caddr, &r.caddr))
         {
-          r.caddr.sin_port = std::static_pointer_cast<EIBnetServer>(server)->Port;
+          r.caddr.sin6_port = std::static_pointer_cast<EIBnet6Server>(server)->Port;
           r.nat = nat;
-          std::static_pointer_cast<EIBnetServer>(server)->Send (r.ToPacket (), caddr);
+          std::static_pointer_cast<EIBnet6Server>(server)->Send (r.ToPacket (), caddr);
         }
     }
   stop();
@@ -411,7 +411,7 @@ void ConnState::stop()
   sendtimeout.stop();
   send_trigger.stop();
   retries = 0;
-  std::static_pointer_cast<EIBnetServer>(server)->drop_connection (std::static_pointer_cast<ConnState>(shared_from_this()));
+  std::static_pointer_cast<EIBnet6Server>(server)->drop_connection (std::static_pointer_cast<ConnState>(shared_from_this()));
   if (addr)
     {
       dynamic_cast<Router *>(&server->router)->release_client_addr(addr);
@@ -420,13 +420,13 @@ void ConnState::stop()
   SubDriver::stop();
 }
 
-void EIBnetServer::drop_connection (ConnStatePtr s)
+void EIBnet6Server::drop_connection (ConnStatePtr s)
 {
   drop_q.put(std::move(s));
   drop_trigger.send();
 }
 
-void EIBnetServer::drop_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
+void EIBnet6Server::drop_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
 {
   while (!drop_q.isempty())
     {
@@ -454,7 +454,7 @@ void ConnState::reset_timer()
 }
 
 void
-EIBnetServer::handle_packet (EIBNetIPPacket *p1, EIBNetIPSocket *isock)
+EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
 {
   /* Get MAC Address */
   /* TODO: cache all of this, and ask at most once per seoncd */
@@ -510,7 +510,7 @@ EIBnetServer::handle_packet (EIBNetIPPacket *p1, EIBNetIPSocket *isock)
       r2.devicestatus = 0;
       r2.individual_addr = dynamic_cast<Router *>(&router)->addr;
       r2.installid = 0;
-      r2.multicastaddr = mcast->maddr.sin_addr;
+      r2.multicastaddr = mcast->maddr.sin6_addr;
       r2.serial[0]=1;
       r2.serial[1]=2;
       r2.serial[2]=3;
@@ -534,7 +534,7 @@ EIBnetServer::handle_packet (EIBNetIPPacket *p1, EIBNetIPSocket *isock)
 	r2.services.push_back (d);
       if (!GetSourceAddress (t, &r1.caddr, &r2.caddr))
 	goto out;
-      r2.caddr.sin_port = Port;
+      r2.caddr.sin6_port = Port;
       isock->Send (r2.ToPacket (), r1.caddr);
       goto out;
     }
@@ -556,7 +556,7 @@ EIBnetServer::handle_packet (EIBNetIPPacket *p1, EIBNetIPSocket *isock)
       r2.devicestatus = 0;
       r2.individual_addr = dynamic_cast<Router *>(&router)->addr;
       r2.installid = 0;
-      r2.multicastaddr = mcast->maddr.sin_addr;
+      r2.multicastaddr = mcast->maddr.sin6_addr;
       memcpy(r2.MAC, mac_address, sizeof(r2.MAC));
       //FIXME: Hostname, indiv. address
       strncpy ((char *) r2.name, servername.c_str(), sizeof(r2.name));
@@ -705,7 +705,7 @@ EIBnetServer::handle_packet (EIBNetIPPacket *p1, EIBNetIPSocket *isock)
           else
             TRACEPRINTF (t, 8, "CONNECTION_REQ: error x%x", r2.status);
         }
-      r2.daddr.sin_port = Port;
+      r2.daddr.sin6_port = Port;
       r2.nat = r1.nat;
       isock->Send (r2.ToPacket (), r1.caddr);
       goto out;
@@ -788,34 +788,34 @@ out:
 }
 
 void
-EIBnetServer::recv_cb (EIBNetIPPacket *p)
+EIBnet6Server::recv_cb (EIBNet6IPPacket *p)
 {
   handle_packet (p, this->sock);
 }
 
 void
-EIBnetServer::error_cb ()
+EIBnet6Server::error_cb ()
 {
   ERRORPRINTF (t, E_ERROR | 23, "Communication error: %s", strerror(errno));
   stop();
 }
 
 //void
-//EIBnetServer::error_cb ()
+//EIBnet6Server::error_cb ()
 //{
 //  TRACEPRINTF (t, 8, "got an error");
 //  stop();
 //}
 
 void
-EIBnetServer::stop()
+EIBnet6Server::stop()
 {
   stop_();
   Server::stop();
 }
 
 void
-EIBnetServer::stop_()
+EIBnet6Server::stop_()
 {
   drop_trigger.stop();
 
@@ -847,21 +847,21 @@ EIBnetServer::stop_()
 }
 
 void
-EIBnetDriver::recv_cb (EIBNetIPPacket *p)
+EIBnet6Driver::recv_cb (EIBNet6IPPacket *p)
 {
-  EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
+  EIBnet6Server &parent = *std::static_pointer_cast<EIBnet6Server>(server);
   parent.handle_packet (p, this->sock);
 }
 
 void
-EIBnetDriver::error_cb ()
+EIBnet6Driver::error_cb ()
 {
-  EIBnetServer &parent = *std::static_pointer_cast<EIBnetServer>(server);
+  EIBnet6Server &parent = *std::static_pointer_cast<EIBnet6Server>(server);
   ERRORPRINTF (t, E_ERROR | 23, "Communication error (driver): %s", strerror(errno));
   parent.stop();
 }
 
-void ConnState::tunnel_request(EIBnet_TunnelRequest &r1, EIBNetIPSocket *isock)
+void ConnState::tunnel_request(EIBnet_TunnelRequest &r1, EIBNet6IPSocket *isock)
 {
   EIBnet_TunnelACK r2;
   r2.channel = r1.channel;
@@ -952,7 +952,7 @@ void ConnState::tunnel_response (EIBnet_TunnelACK &r1)
     }
 }
 
-void ConnState::config_request(EIBnet_ConfigRequest &r1, EIBNetIPSocket *isock)
+void ConnState::config_request(EIBnet_ConfigRequest &r1, EIBNet6IPSocket *isock)
 {
   EIBnet_ConfigACK r2;
   if (rno == ((r1.seqno + 1) & 0xff))

@@ -451,8 +451,8 @@ parse_opt (int key, char *arg, struct argp_state *state)
       {
         if (arguments->filters.size())
           die("Use filters in front of -R or -T, not -S");
-        ADD((*ini["main"])["connections"], "server");
-        (*ini["server"])["server"] = "ets_router";
+        ADD((*ini["main"])["connections"], "server6");
+        (*ini["server6"])["server"] = "ets_router6";
         arguments->want_server = false;
 
         const char *serverip;
@@ -473,12 +473,12 @@ parse_opt (int key, char *arg, struct argp_state *state)
           *b++ = 0;
           if (atoi (b) > 0)
           {
-            (*ini["server"])["port6"] = b;
+            (*ini["server6"])["port"] = b;
           }
         }
         if (*a)
         {
-          (*ini["server"])["multicast-address6"] = a;
+          (*ini["server6"])["multicast-address"] = a;
         }
 
         if (!name || !*name) {
@@ -488,9 +488,9 @@ parse_opt (int key, char *arg, struct argp_state *state)
             tracename = "mcast:";
             tracename += name;
         }
-        (*ini["debug-server"])["name"] = tracename;
-        (*ini["server"])["debug"] = "debug-server";
-        arguments->stack("server");
+        (*ini["debug-server6"])["name"] = tracename;
+        (*ini["server6"])["debug"] = "debug-server";
+        arguments->stack("server6");
         break;
       }
     case 'S':

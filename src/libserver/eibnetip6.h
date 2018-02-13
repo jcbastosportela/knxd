@@ -16,6 +16,10 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
+/*
+    date modified: 13 feb 2018
+    author: João Carlos Bastos Portela <jcbastosportela@gmail.com>
+*/
 
 #ifndef EIBNETIP_H
 #define EIBNETIP_H

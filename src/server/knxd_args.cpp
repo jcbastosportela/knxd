@@ -113,6 +113,13 @@ public:
   bool single_port = true;
   const char *intf = nullptr;
 
+  bool bT = false;
+  bool bR = false;
+  bool bD = false;
+  bool bOPT_SINGLE_PORT = false;
+  bool bOPT_MULTI_PORT = false;
+  bool bI = false;
+
   L2options l2opts;
   const char *serverip;
   std::string servername = "knxd";
@@ -424,35 +431,73 @@ parse_opt (int key, char *arg, struct argp_state *state)
     {
     case 'T':
       arguments->stack("tunnel");
-      (*ini["server"])["tunnel"] = "tunnel";
+      arguments->bT = true;
       arguments->want_server = true;
       break;
     case 'R':
       arguments->stack("router");
-      (*ini["server"])["router"] = "router";
+      arguments->bR = true;
       arguments->want_server = true;
       // (*ini["router"])["driver"] = "ets-multicast";
       break;
     case 'D':
       arguments->stack("server"); // to allow for -t255 -DTRS
+      arguments->bD = true;
       arguments->want_server = true;
-      (*ini["server"])["discover"] = "true";
       break;
     case OPT_SINGLE_PORT:
-      (*ini["server"])["multi-port"] = "false";
+      arguments->bOPT_SINGLE_PORT = true;
       break;
     case OPT_MULTI_PORT:
-      (*ini["server"])["multi-port"] = "true";
+      arguments->bOPT_MULTI_PORT = true;
       break;
     case 'I':
-      (*ini["server"])["interface"] = arg;
+      arguments->bI = true;
+      arguments->intf = arg;
       break;
     case 'X':
       {
+        if( arguments->bT )
+        {
+          (*ini["server6"])["tunnel"] = "tunnel";
+          arguments->bT = false;
+        }
+        if( arguments->bR )
+        {
+          (*ini["server6"])["router"] = "router";
+          arguments->bR = false;
+        }
+        if( arguments->bD )
+        {
+          (*ini["server6"])["discover"] = "true";
+          arguments->bD = false;
+        }
+        if( arguments->bOPT_SINGLE_PORT )
+        {
+          (*ini["server6"])["multi-port"] = "false";
+          arguments->bOPT_SINGLE_PORT = false;
+        }
+        if( arguments->bOPT_MULTI_PORT )
+        {
+          (*ini["server6"])["multi-port"] = "true";
+          arguments->bOPT_MULTI_PORT = false;
+        }
+        if( arguments->bI )
+        {
+          (*ini["server6"])["interface"] = arg;
+          arguments->bI = false;
+        }
+
         if (arguments->filters.size())
           die("Use filters in front of -R or -T, not -S");
-        ADD((*ini["main"])["connections"], "server");
-        (*ini["server"])["server"] = "ets_router6";
+        ADD((*ini["main"])["connections"], "server6");
+        (*ini["server6"])["server"] = "ets_router6";
+        /* test { */
+        if( arguments->want_server )
+        {
+          (*ini["server6"])["router"] = "router6";
+        }
+        /* } */
         arguments->want_server = false;
 
         const char *serverip;
@@ -473,12 +518,12 @@ parse_opt (int key, char *arg, struct argp_state *state)
           *b++ = 0;
           if (atoi (b) > 0)
           {
-            (*ini["server"])["port"] = b;
+            (*ini["server6"])["port"] = b;
           }
         }
         if (*a)
         {
-          (*ini["server"])["multicast-address"] = a;
+          (*ini["server6"])["multicast-address"] = a;
         }
 
         if (!name || !*name) {
@@ -488,13 +533,44 @@ parse_opt (int key, char *arg, struct argp_state *state)
             tracename = "mcast6:";
             tracename += name;
         }
-        (*ini["debug-server"])["name"] = tracename;
-        (*ini["server"])["debug"] = "debug-server";
-        arguments->stack("server");
+        (*ini["debug-server6"])["name"] = tracename;
+        (*ini["server6"])["debug"] = "debug-server6";
+        arguments->stack("server6");
         break;
       }
     case 'S':
       {
+        if( arguments->bT )
+        {
+          (*ini["server"])["tunnel"] = "tunnel";
+          arguments->bT = false;
+        }
+        if( arguments->bR )
+        {
+          (*ini["server"])["router"] = "router";
+          arguments->bR = false;
+        }
+        if( arguments->bD )
+        {
+          (*ini["server"])["discover"] = "true";
+          arguments->bD = false;
+        }
+        if( arguments->bOPT_SINGLE_PORT )
+        {
+          (*ini["server"])["multi-port"] = "false";
+          arguments->bOPT_SINGLE_PORT = false;
+        }
+        if( arguments->bOPT_MULTI_PORT )
+        {
+          (*ini["server"])["multi-port"] = "true";
+          arguments->bOPT_MULTI_PORT = false;
+        }
+        if( arguments->bI )
+        {
+          (*ini["server"])["interface"] = arg;
+          arguments->bI = false;
+        }
+
         if (arguments->filters.size())
           die("Use filters in front of -R or -T, not -S");
         ADD((*ini["main"])["connections"], "server");

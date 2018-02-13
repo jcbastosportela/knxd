@@ -27,16 +27,16 @@
 #include "eibnetip6.h"
 #include "config.h"
 
-EIBNetIPPacket::EIBNetIPPacket ()
+EIBNet6IPPacket::EIBNet6IPPacket ()
 {
   service = 0;
   memset (&src, 0, sizeof (src));
 }
 
-EIBNetIPPacket *
-EIBNetIPPacket::fromPacket (const CArray & c, const struct sockaddr_in src)
+EIBNet6IPPacket *
+EIBNet6IPPacket::fromPacket (const CArray & c, const struct sockaddr_in6 src)
 {
-  EIBNetIPPacket *p;
+  EIBNet6IPPacket *p;
   if (c.size() < 6)
     return 0;
   if (c[0] != 0x6 || c[1] != 0x10)
@@ -44,7 +44,7 @@ EIBNetIPPacket::fromPacket (const CArray & c, const struct sockaddr_in src)
   unsigned len = (c[4] << 8) | c[5];
   if (len != c.size())
     return 0;
-  p = new EIBNetIPPacket;
+  p = new EIBNet6IPPacket;
   p->service = (c[2] << 8) | c[3];
   p->data.set (c.data() + 6, len - 6);
   p->src = src;
@@ -52,7 +52,7 @@ EIBNetIPPacket::fromPacket (const CArray & c, const struct sockaddr_in src)
 }
 
 CArray
-EIBNetIPPacket::ToPacket ()
+EIBNet6IPPacket::ToPacket ()
   CONST
 {
   CArray c;
@@ -68,63 +68,65 @@ EIBNetIPPacket::ToPacket ()
 }
 
 CArray
-IPtoEIBNetIP (const struct sockaddr_in * a, bool nat)
+IPtoEIBNetIP (const struct sockaddr_in6 * a, bool nat)
 {
   CArray buf;
-  buf.resize (8);
+  buf.resize (18);
   buf[0] = 0x08;
   buf[1] = 0x01;
   if (nat)
     {
-      buf[2] = 0;
-      buf[3] = 0;
-      buf[4] = 0;
-      buf[5] = 0;
-      buf[6] = 0;
-      buf[7] = 0;
+      memset( &buf[2], 0, 18-2 );
     }
   else
     {
-      buf[2] = (ntohl (a->sin_addr.s_addr) >> 24) & 0xff;
-      buf[3] = (ntohl (a->sin_addr.s_addr) >> 16) & 0xff;
-      buf[4] = (ntohl (a->sin_addr.s_addr) >> 8) & 0xff;
-      buf[5] = (ntohl (a->sin_addr.s_addr) >> 0) & 0xff;
-      buf[6] = (ntohs (a->sin_port) >> 8) & 0xff;
-      buf[7] = (ntohs (a->sin_port) >> 0) & 0xff;
+      for( uint8_t u8idx = 0; u8idx < 16; u8idx++ )
+      {
+        buf[2+u8idx] = a->sin6_addr.s6_addr[15-u8idx];
+      }
+      buf[6] = (ntohs (a->sin6_port) >> 8) & 0xff;
+      buf[7] = (ntohs (a->sin6_port) >> 0) & 0xff;
     }
   return buf;
 }
 
 bool
-EIBnettoIP (const CArray & buf, struct sockaddr_in *a,
-	    const struct sockaddr_in *src, bool & nat)
+EIBnettoIP (const CArray & buf, struct sockaddr_in6 *a,
+	    const struct sockaddr_in6 *src, bool & nat)
 {
-  int ip, port;
+  int port;
+  struct in6_addr ip;
+  uint8_t u8ipCalc = 0;
+
   memset (a, 0, sizeof (*a));
   if (buf[0] != 0x8 || buf[1] != 0x1)
     return true;
-  ip = (buf[2] << 24) | (buf[3] << 16) | (buf[4] << 8) | (buf[5]);
+  for( uint8_t u8idx = 0; u8idx < 16; u8idx++)
+  {
+    ip.s6_addr[15-u8idx]=buf[2+u8idx];
+    u8ipCalc |= buf[2+u8idx];
+  }
   port = (buf[6] << 8) | (buf[7]);
 #ifdef HAVE_SOCKADDR_IN_LEN
-  a->sin_len = sizeof (*a);
+  a->sin6_len = sizeof (*a);
 #endif
-  a->sin_family = AF_INET;
+  a->sin6_family = AF_INET6;
   if (port == 0)
-    a->sin_port = src->sin_port;
+    a->sin6_port = src->sin6_port;
   else
-    a->sin_port = htons (port);
-  if (ip == 0)
+    a->sin6_port = htons (port);
+  if (u8ipCalc == 0)
     {
       nat = true;
-      a->sin_addr.s_addr = src->sin_addr.s_addr;
+      a->sin6_addr = src->sin6_addr;
     }
   else
-    a->sin_addr.s_addr = htonl (ip);
+    a->sin6_addr = ip;
 
   return false;
 }
 
-EIBNetIPSocket::EIBNetIPSocket (struct sockaddr_in bindaddr, bool reuseaddr,
+EIBNet6IPSocket::EIBNet6IPSocket (struct sockaddr_in6 bindaddr, bool reuseaddr,
 				TracePtr tr, SockMode mode)
 {
   int i;
@@ -137,16 +139,27 @@ EIBNetIPSocket::EIBNetIPSocket (struct sockaddr_in bindaddr, bool reuseaddr,
   memset (&recvaddr2, 0, sizeof (recvaddr2));
   recvall = 0;
 
-  io_send.set<EIBNetIPSocket, &EIBNetIPSocket::io_send_cb>(this);
-  io_recv.set<EIBNetIPSocket, &EIBNetIPSocket::io_recv_cb>(this);
-  on_recv.set<EIBNetIPSocket, &EIBNetIPSocket::recv_cb>(this); // dummy
-  on_error.set<EIBNetIPSocket, &EIBNetIPSocket::error_cb>(this); // dummy
-  on_next.set<EIBNetIPSocket, &EIBNetIPSocket::next_cb>(this); // dummy
+  io_send.set<EIBNet6IPSocket, &EIBNet6IPSocket::io_send_cb>(this);
+  io_recv.set<EIBNet6IPSocket, &EIBNet6IPSocket::io_recv_cb>(this);
+  on_recv.set<EIBNet6IPSocket, &EIBNet6IPSocket::recv_cb>(this); // dummy
+  on_error.set<EIBNet6IPSocket, &EIBNet6IPSocket::error_cb>(this); // dummy
+  on_next.set<EIBNet6IPSocket, &EIBNet6IPSocket::next_cb>(this); // dummy
 
-  fd = socket (AF_INET, SOCK_DGRAM, 0);
+  fd = socket (AF_INET6, SOCK_DGRAM, 0);
   if (fd == -1)
     return;
   set_non_blocking(fd);
+
+  // Set the number of hops: this will affect how many subnetworks it can pass
+  // TODO: maybe this must be a parameter
+  uint32_t u8Hops = 10;
+  if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &u8Hops, sizeof(u8Hops)) < 0)
+  {
+    ERRORPRINTF (t, E_ERROR | 39, "cannot set number of hops: %s", strerror(errno));
+    close(fd);
+    fd = -1;
+    return;
+  }
 
   if (reuseaddr)
     {
@@ -169,10 +182,10 @@ EIBNetIPSocket::EIBNetIPSocket (struct sockaddr_in bindaddr, bool reuseaddr,
 
   // Enable loopback so processes on the same host see each other.
   {
-    char loopch=1;
+    uint32_t loopch=1;
  
-    if (setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP,
-                   (char *)&loopch, sizeof(loopch)) < 0) {
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loopch, sizeof(loopch)) < 0)
+    {
       ERRORPRINTF (t, E_ERROR | 39, "cannot turn on multicast loopback: %s", strerror(errno));
       close(fd);
       fd = -1;
@@ -191,21 +204,21 @@ EIBNetIPSocket::EIBNetIPSocket (struct sockaddr_in bindaddr, bool reuseaddr,
   TRACEPRINTF (t, 0, "Opened");
 }
 
-EIBNetIPSocket::~EIBNetIPSocket ()
+EIBNet6IPSocket::~EIBNet6IPSocket ()
 {
   TRACEPRINTF (t, 0, "Close");
   stop();
 }
 
 void
-EIBNetIPSocket::stop()
+EIBNet6IPSocket::stop()
 {
   if (fd != -1)
     {
       io_recv.stop();
       io_send.stop();
       if (multicast)
-	setsockopt (fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &maddr,
+	setsockopt (fd, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &maddr,
 		    sizeof (maddr));
       close (fd);
       fd = -1;
@@ -213,7 +226,7 @@ EIBNetIPSocket::stop()
 }
 
 void
-EIBNetIPSocket::pause()
+EIBNet6IPSocket::pause()
 {
     if (paused)
         return;
@@ -222,7 +235,7 @@ EIBNetIPSocket::pause()
 }
 
 void
-EIBNetIPSocket::unpause()
+EIBNet6IPSocket::unpause()
 {
     if (! paused)
         return;
@@ -231,7 +244,7 @@ EIBNetIPSocket::unpause()
 }
 
 bool
-EIBNetIPSocket::init ()
+EIBNet6IPSocket::init ()
 {
   if (fd < 0)
     return false;
@@ -240,27 +253,27 @@ EIBNetIPSocket::init ()
 }
 
 int
-EIBNetIPSocket::port ()
+EIBNet6IPSocket::port ()
 {
-  struct sockaddr_in sa;
+  struct sockaddr_in6 sa;
   socklen_t saLen = sizeof(sa);
   if (getsockname(fd, (struct sockaddr *) &sa, &saLen) < 0)
     return -1;
-  if (sa.sin_family != AF_INET)
+  if (sa.sin6_family != AF_INET6)
     {
       errno = ENODATA;
       return -1;
     }
-  return sa.sin_port;
+  return sa.sin6_port;
 }
 
 bool
-EIBNetIPSocket::SetMulticast (struct ip_mreq multicastaddr)
+EIBNet6IPSocket::SetMulticast (struct ipv6_mreq multicastaddr)
 {
   if (multicast)
     return false;
   maddr = multicastaddr;
-  if (setsockopt (fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &maddr, sizeof (maddr))
+  if (setsockopt (fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &maddr, sizeof (maddr))
       == -1)
     return false;
   multicast = true;
@@ -268,9 +281,9 @@ EIBNetIPSocket::SetMulticast (struct ip_mreq multicastaddr)
 }
 
 void
-EIBNetIPSocket::Send (EIBNetIPPacket p, struct sockaddr_in addr)
+EIBNet6IPSocket::Send (EIBNet6IPPacket p, struct sockaddr_in6 addr)
 {
-  struct _EIBNetIP_Send s;
+  struct _EIBNet6IP_Send s;
   t->TracePacket (1, "Send", p.data);
   s.data = p;
   s.addr = addr;
@@ -281,7 +294,7 @@ EIBNetIPSocket::Send (EIBNetIPPacket p, struct sockaddr_in addr)
 }
 
 void
-EIBNetIPSocket::io_send_cb (ev::io &w UNUSED, int revents UNUSED)
+EIBNet6IPSocket::io_send_cb (ev::io &w UNUSED, int revents UNUSED)
 {
   if (send_q.isempty ())
     {
@@ -289,7 +302,7 @@ EIBNetIPSocket::io_send_cb (ev::io &w UNUSED, int revents UNUSED)
       on_next();
       return;
     }
-  const struct _EIBNetIP_Send s = send_q.front ();
+  const struct _EIBNet6IP_Send s = send_q.front ();
   CArray p = s.data.ToPacket ();
   t->TracePacket (0, "Send", p);
   int i = sendto (fd, p.data(), p.size(), 0,
@@ -316,11 +329,11 @@ EIBNetIPSocket::io_send_cb (ev::io &w UNUSED, int revents UNUSED)
 }
 
 void
-EIBNetIPSocket::io_recv_cb (ev::io &w UNUSED, int revents UNUSED)
+EIBNet6IPSocket::io_recv_cb (ev::io &w UNUSED, int revents UNUSED)
 {
   uchar buf[255];
   socklen_t rl;
-  sockaddr_in r;
+  sockaddr_in6 r;
   rl = sizeof (r);
   memset (&r, 0, sizeof (r));
 
@@ -334,8 +347,8 @@ EIBNetIPSocket::io_recv_cb (ev::io &w UNUSED, int revents UNUSED)
           (recvall == 3 && !memcmp (&r, &recvaddr2, sizeof (r))))
         {
           t->TracePacket (0, "Recv", i, buf);
-          EIBNetIPPacket *p =
-            EIBNetIPPacket::fromPacket (CArray (buf, i), r);
+          EIBNet6IPPacket *p =
+            EIBNet6IPPacket::fromPacket (CArray (buf, i), r);
           if (p)
             on_recv(p);
           else
@@ -347,31 +360,31 @@ EIBNetIPSocket::io_recv_cb (ev::io &w UNUSED, int revents UNUSED)
 }
 
 bool
-EIBNetIPSocket::SetInterface(std::string& iface)
+EIBNet6IPSocket::SetInterface(std::string& iface)
 {
-  struct sockaddr_in sa;
-  struct ip_mreqn addr;
+  struct sockaddr_in6 sa;
+  struct ipv6_mreq addr;
 
   memset (&sa, 0, sizeof(sa));
   memset (&addr, 0, sizeof(addr));
 
   if (iface.size() == 0)
     return true;
-  addr.imr_ifindex = if_nametoindex(iface.c_str());
+  addr.ipv6mr_interface = if_nametoindex(iface.c_str());
   return
-    setsockopt(fd, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof(addr)) >= 0;
+    setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &addr, sizeof(addr)) >= 0;
 }
 
-EIBnet_ConnectRequest::EIBnet_ConnectRequest ()
+EIBnet6_ConnectRequest::EIBnet6_ConnectRequest ()
 {
   memset (&caddr, 0, sizeof (caddr));
   memset (&daddr, 0, sizeof (daddr));
   nat = false;
 }
 
-EIBNetIPPacket EIBnet_ConnectRequest::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_ConnectRequest::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   CArray ca, da;
   ca = IPtoEIBNetIP (&caddr, nat);
   da = IPtoEIBNetIP (&daddr, nat);
@@ -385,8 +398,8 @@ EIBNetIPPacket EIBnet_ConnectRequest::ToPacket ()CONST
 }
 
 int
-parseEIBnet_ConnectRequest (const EIBNetIPPacket & p,
-			    EIBnet_ConnectRequest & r)
+parseEIBnet6_ConnectRequest (const EIBNet6IPPacket & p,
+			    EIBnet6_ConnectRequest & r)
 {
   if (p.service != CONNECTION_REQUEST)
     return 1;
@@ -402,7 +415,7 @@ parseEIBnet_ConnectRequest (const EIBNetIPPacket & p,
   return 0;
 }
 
-EIBnet_ConnectResponse::EIBnet_ConnectResponse ()
+EIBnet6_ConnectResponse::EIBnet6_ConnectResponse ()
 {
   memset (&daddr, 0, sizeof (daddr));
   nat = false;
@@ -410,9 +423,9 @@ EIBnet_ConnectResponse::EIBnet_ConnectResponse ()
   status = 0;
 }
 
-EIBNetIPPacket EIBnet_ConnectResponse::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_ConnectResponse::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   CArray da = IPtoEIBNetIP (&daddr, nat);
   p.service = CONNECTION_RESPONSE;
   if (status != 0)
@@ -431,8 +444,8 @@ EIBNetIPPacket EIBnet_ConnectResponse::ToPacket ()CONST
 }
 
 int
-parseEIBnet_ConnectResponse (const EIBNetIPPacket & p,
-			     EIBnet_ConnectResponse & r)
+parseEIBnet6_ConnectResponse (const EIBNet6IPPacket & p,
+			     EIBnet6_ConnectResponse & r)
 {
   if (p.service != CONNECTION_RESPONSE)
     return 1;
@@ -458,16 +471,16 @@ parseEIBnet_ConnectResponse (const EIBNetIPPacket & p,
   return 0;
 }
 
-EIBnet_ConnectionStateRequest::EIBnet_ConnectionStateRequest ()
+EIBnet6_ConnectionStateRequest::EIBnet6_ConnectionStateRequest ()
 {
   memset (&caddr, 0, sizeof (caddr));
   nat = false;
   channel = 0;
 }
 
-EIBNetIPPacket EIBnet_ConnectionStateRequest::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_ConnectionStateRequest::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   CArray ca = IPtoEIBNetIP (&caddr, nat);
   p.service = CONNECTIONSTATE_REQUEST;
   p.data.resize (ca.size() + 2);
@@ -478,8 +491,8 @@ EIBNetIPPacket EIBnet_ConnectionStateRequest::ToPacket ()CONST
 }
 
 int
-parseEIBnet_ConnectionStateRequest (const EIBNetIPPacket & p,
-				    EIBnet_ConnectionStateRequest & r)
+parseEIBnet6_ConnectionStateRequest (const EIBNet6IPPacket & p,
+				    EIBnet6_ConnectionStateRequest & r)
 {
   if (p.service != CONNECTIONSTATE_REQUEST)
     return 1;
@@ -491,15 +504,15 @@ parseEIBnet_ConnectionStateRequest (const EIBNetIPPacket & p,
   return 0;
 }
 
-EIBnet_ConnectionStateResponse::EIBnet_ConnectionStateResponse ()
+EIBnet6_ConnectionStateResponse::EIBnet6_ConnectionStateResponse ()
 {
   channel = 0;
   status = 0;
 }
 
-EIBNetIPPacket EIBnet_ConnectionStateResponse::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_ConnectionStateResponse::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   p.service = CONNECTIONSTATE_RESPONSE;
   p.data.resize (2);
   p.data[0] = channel;
@@ -508,8 +521,8 @@ EIBNetIPPacket EIBnet_ConnectionStateResponse::ToPacket ()CONST
 }
 
 int
-parseEIBnet_ConnectionStateResponse (const EIBNetIPPacket & p,
-				     EIBnet_ConnectionStateResponse & r)
+parseEIBnet6_ConnectionStateResponse (const EIBNet6IPPacket & p,
+				     EIBnet6_ConnectionStateResponse & r)
 {
   if (p.service != CONNECTIONSTATE_RESPONSE)
     return 1;
@@ -520,16 +533,16 @@ parseEIBnet_ConnectionStateResponse (const EIBNetIPPacket & p,
   return 0;
 }
 
-EIBnet_DisconnectRequest::EIBnet_DisconnectRequest ()
+EIBnet6_DisconnectRequest::EIBnet6_DisconnectRequest ()
 {
   memset (&caddr, 0, sizeof (caddr));
   nat = false;
   channel = 0;
 }
 
-EIBNetIPPacket EIBnet_DisconnectRequest::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_DisconnectRequest::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   CArray ca = IPtoEIBNetIP (&caddr, nat);
   p.service = DISCONNECT_REQUEST;
   p.data.resize (ca.size() + 2);
@@ -540,8 +553,8 @@ EIBNetIPPacket EIBnet_DisconnectRequest::ToPacket ()CONST
 }
 
 int
-parseEIBnet_DisconnectRequest (const EIBNetIPPacket & p,
-			       EIBnet_DisconnectRequest & r)
+parseEIBnet6_DisconnectRequest (const EIBNet6IPPacket & p,
+			       EIBnet6_DisconnectRequest & r)
 {
   if (p.service != DISCONNECT_REQUEST)
     return 1;
@@ -553,15 +566,15 @@ parseEIBnet_DisconnectRequest (const EIBNetIPPacket & p,
   return 0;
 }
 
-EIBnet_DisconnectResponse::EIBnet_DisconnectResponse ()
+EIBnet6_DisconnectResponse::EIBnet6_DisconnectResponse ()
 {
   channel = 0;
   status = 0;
 }
 
-EIBNetIPPacket EIBnet_DisconnectResponse::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_DisconnectResponse::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   p.service = DISCONNECT_RESPONSE;
   p.data.resize (2);
   p.data[0] = channel;
@@ -570,8 +583,8 @@ EIBNetIPPacket EIBnet_DisconnectResponse::ToPacket ()CONST
 }
 
 int
-parseEIBnet_DisconnectResponse (const EIBNetIPPacket & p,
-				EIBnet_DisconnectResponse & r)
+parseEIBnet6_DisconnectResponse (const EIBNet6IPPacket & p,
+				EIBnet6_DisconnectResponse & r)
 {
   if (p.service != DISCONNECT_RESPONSE)
     return 1;
@@ -582,15 +595,15 @@ parseEIBnet_DisconnectResponse (const EIBNetIPPacket & p,
   return 0;
 }
 
-EIBnet_TunnelRequest::EIBnet_TunnelRequest ()
+EIBnet6_TunnelRequest::EIBnet6_TunnelRequest ()
 {
   channel = 0;
   seqno = 0;
 }
 
-EIBNetIPPacket EIBnet_TunnelRequest::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_TunnelRequest::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   p.service = TUNNEL_REQUEST;
   p.data.resize (CEMI.size() + 4);
   p.data[0] = 4;
@@ -602,7 +615,7 @@ EIBNetIPPacket EIBnet_TunnelRequest::ToPacket ()CONST
 }
 
 int
-parseEIBnet_TunnelRequest (const EIBNetIPPacket & p, EIBnet_TunnelRequest & r)
+parseEIBnet6_TunnelRequest (const EIBNet6IPPacket & p, EIBnet6_TunnelRequest & r)
 {
   if (p.service != TUNNEL_REQUEST)
     return 1;
@@ -616,16 +629,16 @@ parseEIBnet_TunnelRequest (const EIBNetIPPacket & p, EIBnet_TunnelRequest & r)
   return 0;
 }
 
-EIBnet_TunnelACK::EIBnet_TunnelACK ()
+EIBnet6_TunnelACK::EIBnet6_TunnelACK ()
 {
   channel = 0;
   seqno = 0;
   status = 0;
 }
 
-EIBNetIPPacket EIBnet_TunnelACK::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_TunnelACK::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   p.service = TUNNEL_RESPONSE;
   p.data.resize (4);
   p.data[0] = 4;
@@ -636,7 +649,7 @@ EIBNetIPPacket EIBnet_TunnelACK::ToPacket ()CONST
 }
 
 int
-parseEIBnet_TunnelACK (const EIBNetIPPacket & p, EIBnet_TunnelACK & r)
+parseEIBnet6_TunnelACK (const EIBNet6IPPacket & p, EIBnet6_TunnelACK & r)
 {
   if (p.service != TUNNEL_RESPONSE)
     return 1;
@@ -650,15 +663,15 @@ parseEIBnet_TunnelACK (const EIBNetIPPacket & p, EIBnet_TunnelACK & r)
   return 0;
 }
 
-EIBnet_ConfigRequest::EIBnet_ConfigRequest ()
+EIBnet6_ConfigRequest::EIBnet6_ConfigRequest ()
 {
   channel = 0;
   seqno = 0;
 }
 
-EIBNetIPPacket EIBnet_ConfigRequest::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_ConfigRequest::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   p.service = DEVICE_CONFIGURATION_REQUEST;
   p.data.resize (CEMI.size() + 4);
   p.data[0] = 4;
@@ -670,7 +683,7 @@ EIBNetIPPacket EIBnet_ConfigRequest::ToPacket ()CONST
 }
 
 int
-parseEIBnet_ConfigRequest (const EIBNetIPPacket & p, EIBnet_ConfigRequest & r)
+parseEIBnet6_ConfigRequest (const EIBNet6IPPacket & p, EIBnet6_ConfigRequest & r)
 {
   if (p.service != DEVICE_CONFIGURATION_REQUEST)
     return 1;
@@ -684,16 +697,16 @@ parseEIBnet_ConfigRequest (const EIBNetIPPacket & p, EIBnet_ConfigRequest & r)
   return 0;
 }
 
-EIBnet_ConfigACK::EIBnet_ConfigACK ()
+EIBnet6_ConfigACK::EIBnet6_ConfigACK ()
 {
   channel = 0;
   seqno = 0;
   status = 0;
 }
 
-EIBNetIPPacket EIBnet_ConfigACK::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_ConfigACK::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   p.service = DEVICE_CONFIGURATION_ACK;
   p.data.resize (4);
   p.data[0] = 4;
@@ -704,7 +717,7 @@ EIBNetIPPacket EIBnet_ConfigACK::ToPacket ()CONST
 }
 
 int
-parseEIBnet_ConfigACK (const EIBNetIPPacket & p, EIBnet_ConfigACK & r)
+parseEIBnet6_ConfigACK (const EIBNet6IPPacket & p, EIBnet6_ConfigACK & r)
 {
   if (p.service != DEVICE_CONFIGURATION_ACK)
     return 1;
@@ -718,15 +731,15 @@ parseEIBnet_ConfigACK (const EIBNetIPPacket & p, EIBnet_ConfigACK & r)
   return 0;
 }
 
-EIBnet_DescriptionRequest::EIBnet_DescriptionRequest ()
+EIBnet6_DescriptionRequest::EIBnet6_DescriptionRequest ()
 {
   memset (&caddr, 0, sizeof (caddr));
   nat = false;
 }
 
-EIBNetIPPacket EIBnet_DescriptionRequest::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_DescriptionRequest::ToPacket ()CONST
 {
-  EIBNetIPPacket
+  EIBNet6IPPacket
     p;
   CArray
     ca = IPtoEIBNetIP (&caddr, nat);
@@ -736,8 +749,8 @@ EIBNetIPPacket EIBnet_DescriptionRequest::ToPacket ()CONST
 }
 
 int
-parseEIBnet_DescriptionRequest (const EIBNetIPPacket & p,
-				EIBnet_DescriptionRequest & r)
+parseEIBnet6_DescriptionRequest (const EIBNet6IPPacket & p,
+				EIBnet6_DescriptionRequest & r)
 {
   if (p.service != DESCRIPTION_REQUEST)
     return 1;
@@ -749,21 +762,21 @@ parseEIBnet_DescriptionRequest (const EIBNetIPPacket & p,
 }
 
 
-EIBnet_DescriptionResponse::EIBnet_DescriptionResponse ()
+EIBnet6_DescriptionResponse::EIBnet6_DescriptionResponse ()
 {
   KNXmedium = 0;
   devicestatus = 0;
   individual_addr = 0;
   installid = 0;
   memset (&serial, 0, sizeof (serial));
-  multicastaddr.s_addr = 0;
+  memset(multicastaddr.s6_addr, 0, sizeof(multicastaddr.s6_addr));
   memset (&MAC, 0, sizeof (MAC));
   memset (&name, 0, sizeof (name));
 }
 
-EIBNetIPPacket EIBnet_DescriptionResponse::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_DescriptionResponse::ToPacket ()CONST
 {
-  EIBNetIPPacket
+  EIBNet6IPPacket
     p;
   p.service = DESCRIPTION_RESPONSE;
   p.data.resize (56 + services.size() * 2);
@@ -792,8 +805,8 @@ EIBNetIPPacket EIBnet_DescriptionResponse::ToPacket ()CONST
 }
 
 int
-parseEIBnet_DescriptionResponse (const EIBNetIPPacket & p,
-				 EIBnet_DescriptionResponse & r)
+parseEIBnet6_DescriptionResponse (const EIBNet6IPPacket & p,
+				 EIBnet6_DescriptionResponse & r)
 {
   if (p.service != DESCRIPTION_RESPONSE)
     return 1;
@@ -829,15 +842,15 @@ parseEIBnet_DescriptionResponse (const EIBNetIPPacket & p,
   return 0;
 }
 
-EIBnet_SearchRequest::EIBnet_SearchRequest ()
+EIBnet6_SearchRequest::EIBnet6_SearchRequest ()
 {
   memset (&caddr, 0, sizeof (caddr));
   nat = false;
 }
 
-EIBNetIPPacket EIBnet_SearchRequest::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_SearchRequest::ToPacket ()CONST
 {
-  EIBNetIPPacket
+  EIBNet6IPPacket
     p;
   CArray
     ca = IPtoEIBNetIP (&caddr, nat);
@@ -847,7 +860,7 @@ EIBNetIPPacket EIBnet_SearchRequest::ToPacket ()CONST
 }
 
 int
-parseEIBnet_SearchRequest (const EIBNetIPPacket & p, EIBnet_SearchRequest & r)
+parseEIBnet6_SearchRequest (const EIBNet6IPPacket & p, EIBnet6_SearchRequest & r)
 {
   if (p.service != SEARCH_REQUEST)
     return 1;
@@ -859,21 +872,21 @@ parseEIBnet_SearchRequest (const EIBNetIPPacket & p, EIBnet_SearchRequest & r)
 }
 
 
-EIBnet_SearchResponse::EIBnet_SearchResponse ()
+EIBnet6_SearchResponse::EIBnet6_SearchResponse ()
 {
   KNXmedium = 0;
   devicestatus = 0;
   individual_addr = 0;
   installid = 0;
   memset (&serial, 0, sizeof (serial));
-  multicastaddr.s_addr = 0;
+  memset(multicastaddr.s6_addr, 0, sizeof(multicastaddr.s6_addr));
   memset (&MAC, 0, sizeof (MAC));
   memset (&name, 0, sizeof (name));
 }
 
-EIBNetIPPacket EIBnet_SearchResponse::ToPacket ()CONST
+EIBNet6IPPacket EIBnet6_SearchResponse::ToPacket ()CONST
 {
-  EIBNetIPPacket p;
+  EIBNet6IPPacket p;
   CArray ca = IPtoEIBNetIP (&caddr, nat);
   p.service = SEARCH_RESPONSE;
   p.data.resize (64 + services.size() * 2);
@@ -902,8 +915,8 @@ EIBNetIPPacket EIBnet_SearchResponse::ToPacket ()CONST
 }
 
 int
-parseEIBnet_SearchResponse (const EIBNetIPPacket & p,
-			    EIBnet_SearchResponse & r)
+parseEIBnet6_SearchResponse (const EIBNet6IPPacket & p,
+			    EIBnet6_SearchResponse & r)
 {
   if (p.service != SEARCH_RESPONSE)
     return 1;

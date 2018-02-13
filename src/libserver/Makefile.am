@@ -36,9 +36,9 @@ BUSMON=busmonitor.h busmonitor.cpp
 else
 BUSMON=
 endif
-NETIP=eibnetip.cpp eibnetip.h 
+NETIP=eibnetip.cpp eibnetip.h eibnetip6.cpp eibnetip6.h 
 if HAVE_EIBNETSERVER
-EIBNETIP=eibnetserver.cpp eibnetserver.h
+EIBNETIP=eibnetserver.cpp eibnetserver.h eibnet6server.cpp eibnet6server.h
 else
 EIBNETIP=
 endif

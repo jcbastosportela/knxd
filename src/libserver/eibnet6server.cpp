@@ -89,8 +89,8 @@ EIBnet6Driver::EIBnet6Driver (LinkConnectClientPtr c,
       sock = parent.sock;
     }
 
-  mcfg.imr_multiaddr = maddr.sin6_addr;
-  mcfg.imr_interface.s_addr = htonl (INADDR_ANY);
+  mcfg.ipv6mr_multiaddr = maddr.sin6_addr;
+  mcfg.ipv6mr_interface = 0;
   if (!sock->SetMulticast (mcfg))
     goto err_out;
 
@@ -155,6 +155,9 @@ EIBnet6Server::setup()
   interface = cfg->value("interface","");
   servername = cfg->value("name", dynamic_cast<Router *>(&router)->servername);
 
+  TRACEPRINTF (t, 8, "multicastaddr %s", multicastaddr);
+  TRACEPRINTF (t, 8, "interface %s", interface);
+  TRACEPRINTF (t, 8, "servername %s", servername);
   if (tunnel)
     {
       /* Check that we have client addresses. */
@@ -182,7 +185,7 @@ EIBnet6Server::start()
 
   TRACEPRINTF (t, 8, "Open");
 
-  sock_mac = socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP);
+  sock_mac = socket(AF_INET6, SOCK_DGRAM, 0);
   if (sock_mac < 0)
   {
     ERRORPRINTF (t, E_ERROR | 27, "Lookup socket creation failed");
@@ -192,7 +195,7 @@ EIBnet6Server::start()
 #ifdef HAVE_SOCKADDR_IN_LEN
   baddr.sin6_len = sizeof (baddr);
 #endif
-  baddr.sin6_family = AF_INET;
+  baddr.sin6_family = AF_INET6;
   baddr.sin6_addr= in6addr_any;
   baddr.sin6_port = single_port ? htons(port) : 0;
 
@@ -263,7 +266,7 @@ EIBnet6Driver::send_L_Data (LDataPtr l)
   send_Next();
 }
 
-bool ConnState::setup()
+bool ConnState_ipv6::setup()
 {
   // Force queuing so that a bad or unreachable client can't disable the whole system
   if (!assureFilter("queue", true))
@@ -278,7 +281,7 @@ bool ConnState::setup()
   return true;
 }
 
-void ConnState::send_L_Busmonitor (LBusmonPtr l)
+void ConnState_ipv6::send_L_Busmonitor (LBusmonPtr l)
 {
   if (type == CT_BUSMONITOR)
     {
@@ -288,7 +291,7 @@ void ConnState::send_L_Busmonitor (LBusmonPtr l)
     }
 }
 
-void ConnState::send_L_Data (LDataPtr l)
+void ConnState_ipv6::send_L_Data (LDataPtr l)
 {
   if (type == CT_STANDARD)
     {
@@ -301,7 +304,7 @@ void ConnState::send_L_Data (LDataPtr l)
 }
 
 int
-EIBnet6Server::addClient (ConnType type, const EIBnet_ConnectRequest & r1,
+EIBnet6Server::addClient (ConnType type, const EIBnet6_ConnectRequest & r1,
                          eibaddr_t addr)
 {
   int id = 1;
@@ -315,7 +318,7 @@ rt:
   if (id <= 0xff)
     {
       LinkConnectClientPtr conn = LinkConnectClientPtr(new LinkConnectClient(std::dynamic_pointer_cast<EIBnet6Server>(shared_from_this()), tunnel_cfg, t));
-      ConnStatePtr s = ConnStatePtr(new ConnState(conn, addr));
+      ConnState_ipv6Ptr s = ConnState_ipv6Ptr(new ConnState_ipv6(conn, addr));
       conn->set_driver(s);
       s->channel = id;
       s->daddr = r1.daddr;
@@ -335,20 +338,20 @@ rt:
   return id;
 }
 
-ConnState::ConnState (LinkConnectClientPtr c, eibaddr_t addr)
+ConnState_ipv6::ConnState_ipv6 (LinkConnectClientPtr c, eibaddr_t addr)
   : L_Busmonitor_CallBack(c->t->name), SubDriver (c)
 {
   t->setAuxName(FormatEIBAddr(addr));
-  timeout.set <ConnState,&ConnState::timeout_cb> (this);
-  sendtimeout.set <ConnState,&ConnState::sendtimeout_cb> (this);
-  send_trigger.set<ConnState,&ConnState::send_trigger_cb>(this);
+  timeout.set <ConnState_ipv6,&ConnState_ipv6::timeout_cb> (this);
+  sendtimeout.set <ConnState_ipv6,&ConnState_ipv6::sendtimeout_cb> (this);
+  send_trigger.set<ConnState_ipv6,&ConnState_ipv6::send_trigger_cb>(this);
   send_trigger.start();
   timeout.start(CONNECTION_ALIVE_TIME, 0);
   this->addr = addr;
   TRACEPRINTF (t, 9, "has %s", FormatEIBAddr (addr));
 }
 
-void ConnState::sendtimeout_cb(ev::timer &w UNUSED, int revents UNUSED)
+void ConnState_ipv6::sendtimeout_cb(ev::timer &w UNUSED, int revents UNUSED)
 {
   if (++retries <= 2)
     {
@@ -360,14 +363,14 @@ void ConnState::sendtimeout_cb(ev::timer &w UNUSED, int revents UNUSED)
   stop();
 }
 
-void ConnState::send_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
+void ConnState_ipv6::send_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
 {
   if (out.isempty ())
     return;
   EIBNet6IPPacket p;
   if (type == CT_CONFIG)
     {
-      EIBnet_ConfigRequest r;
+      EIBnet6_ConfigRequest r;
       r.channel = channel;
       r.seqno = sno;
       r.CEMI = out.front ();
@@ -375,7 +378,7 @@ void ConnState::send_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
     }
   else
     {
-      EIBnet_TunnelRequest r;
+      EIBnet6_TunnelRequest r;
       r.channel = channel;
       r.seqno = sno;
       r.CEMI = out.front ();
@@ -386,11 +389,11 @@ void ConnState::send_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
   std::static_pointer_cast<EIBnet6Server>(server)->mcast->Send (p, daddr);
 }
 
-void ConnState::timeout_cb(ev::timer &w UNUSED, int revents UNUSED)
+void ConnState_ipv6::timeout_cb(ev::timer &w UNUSED, int revents UNUSED)
 {
   if (channel > 0)
     {
-      EIBnet_DisconnectRequest r;
+      EIBnet6_DisconnectRequest r;
       r.channel = channel;
       if (GetSourceAddress (t, &caddr, &r.caddr))
         {
@@ -402,7 +405,7 @@ void ConnState::timeout_cb(ev::timer &w UNUSED, int revents UNUSED)
   stop();
 }
 
-void ConnState::stop()
+void ConnState_ipv6::stop()
 {
   TRACEPRINTF (t, 8, "Stop Conn %d", channel);
   if (type == CT_BUSMONITOR)
@@ -411,7 +414,7 @@ void ConnState::stop()
   sendtimeout.stop();
   send_trigger.stop();
   retries = 0;
-  std::static_pointer_cast<EIBnet6Server>(server)->drop_connection (std::static_pointer_cast<ConnState>(shared_from_this()));
+  std::static_pointer_cast<EIBnet6Server>(server)->drop_connection (std::static_pointer_cast<ConnState_ipv6>(shared_from_this()));
   if (addr)
     {
       dynamic_cast<Router *>(&server->router)->release_client_addr(addr);
@@ -420,7 +423,7 @@ void ConnState::stop()
   SubDriver::stop();
 }
 
-void EIBnet6Server::drop_connection (ConnStatePtr s)
+void EIBnet6Server::drop_connection (ConnState_ipv6Ptr s)
 {
   drop_q.put(std::move(s));
   drop_trigger.send();
@@ -430,7 +433,7 @@ void EIBnet6Server::drop_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
 {
   while (!drop_q.isempty())
     {
-      ConnStatePtr s = drop_q.get();
+      ConnState_ipv6Ptr s = drop_q.get();
       ITER(i,connections)
         if (*i == s)
           {
@@ -443,12 +446,12 @@ void EIBnet6Server::drop_trigger_cb(ev::async &w UNUSED, int revents UNUSED)
     }
 }
 
-ConnState::~ConnState()
+ConnState_ipv6::~ConnState_ipv6()
 {
   TRACEPRINTF (t, 8, "CloseS");
 }
 
-void ConnState::reset_timer()
+void ConnState_ipv6::reset_timer()
 {
   timeout.set(120,0);
 }
@@ -494,10 +497,10 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
 
   if (p1->service == SEARCH_REQUEST)
     {
-      EIBnet_SearchRequest r1;
-      EIBnet_SearchResponse r2;
+      EIBnet6_SearchRequest r1;
+      EIBnet6_SearchResponse r2;
       DIB_service_Entry d;
-      if (parseEIBnet_SearchRequest (*p1, r1))
+      if (parseEIBnet6_SearchRequest (*p1, r1))
         {
           t->TracePacket (2, "unparseable SEARCH_REQUEST", p1->data);
           goto out;
@@ -541,10 +544,10 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
 
   if (p1->service == DESCRIPTION_REQUEST)
     {
-      EIBnet_DescriptionRequest r1;
-      EIBnet_DescriptionResponse r2;
+      EIBnet6_DescriptionRequest r1;
+      EIBnet6_DescriptionResponse r2;
       DIB_service_Entry d;
-      if (parseEIBnet_DescriptionRequest (*p1, r1))
+      if (parseEIBnet6_DescriptionRequest (*p1, r1))
         {
           t->TracePacket (2, "unparseable DESCRIPTION_REQUEST", p1->data);
           goto out;
@@ -591,9 +594,9 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
     }
   if (p1->service == CONNECTIONSTATE_REQUEST)
     {
-      EIBnet_ConnectionStateRequest r1;
-      EIBnet_ConnectionStateResponse r2;
-      if (parseEIBnet_ConnectionStateRequest (*p1, r1))
+      EIBnet6_ConnectionStateRequest r1;
+      EIBnet6_ConnectionStateResponse r2;
+      if (parseEIBnet6_ConnectionStateRequest (*p1, r1))
         {
           t->TracePacket (2, "unparseable CONNECTIONSTATE_REQUEST", p1->data);
           goto out;
@@ -616,9 +619,9 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
     }
   if (p1->service == DISCONNECT_REQUEST)
     {
-      EIBnet_DisconnectRequest r1;
-      EIBnet_DisconnectResponse r2;
-      if (parseEIBnet_DisconnectRequest (*p1, r1))
+      EIBnet6_DisconnectRequest r1;
+      EIBnet6_DisconnectResponse r2;
+      if (parseEIBnet6_DisconnectRequest (*p1, r1))
         {
           t->TracePacket (2, "unparseable DISCONNECT_REQUEST", p1->data);
           goto out;
@@ -640,9 +643,9 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
     }
   if (p1->service == CONNECTION_REQUEST)
     {
-      EIBnet_ConnectRequest r1;
-      EIBnet_ConnectResponse r2;
-      if (parseEIBnet_ConnectRequest (*p1, r1))
+      EIBnet6_ConnectRequest r1;
+      EIBnet6_ConnectResponse r2;
+      if (parseEIBnet6_ConnectRequest (*p1, r1))
         {
           t->TracePacket (2, "unparseable CONNECTION_REQUEST", p1->data);
           goto out;
@@ -712,9 +715,9 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
     }
   if (p1->service == TUNNEL_REQUEST)
     {
-      EIBnet_TunnelRequest r1;
-      EIBnet_TunnelACK r2;
-      if (parseEIBnet_TunnelRequest (*p1, r1))
+      EIBnet6_TunnelRequest r1;
+      EIBnet6_TunnelACK r2;
+      if (parseEIBnet6_TunnelRequest (*p1, r1))
         {
           t->TracePacket (2, "unparseable TUNNEL_REQUEST", p1->data);
           goto out;
@@ -731,8 +734,8 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
     }
   if (p1->service == TUNNEL_RESPONSE)
     {
-      EIBnet_TunnelACK r1;
-      if (parseEIBnet_TunnelACK (*p1, r1))
+      EIBnet6_TunnelACK r1;
+      if (parseEIBnet6_TunnelACK (*p1, r1))
         {
           t->TracePacket (2, "unparseable TUNNEL_RESPONSE", p1->data);
           goto out;
@@ -749,9 +752,9 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
     }
   if (p1->service == DEVICE_CONFIGURATION_REQUEST)
     {
-      EIBnet_ConfigRequest r1;
-      EIBnet_ConfigACK r2;
-      if (parseEIBnet_ConfigRequest (*p1, r1))
+      EIBnet6_ConfigRequest r1;
+      EIBnet6_ConfigACK r2;
+      if (parseEIBnet6_ConfigRequest (*p1, r1))
         {
           t->TracePacket (2, "unparseable DEVICE_CONFIGURATION_REQUEST", p1->data);
           goto out;
@@ -767,8 +770,8 @@ EIBnet6Server::handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock)
     }
   if (p1->service == DEVICE_CONFIGURATION_ACK)
     {
-      EIBnet_ConfigACK r1;
-      if (parseEIBnet_ConfigACK (*p1, r1))
+      EIBnet6_ConfigACK r1;
+      if (parseEIBnet6_ConfigACK (*p1, r1))
         {
           t->TracePacket (2, "unparseable DEVICE_CONFIGURATION_ACK", p1->data);
           goto out;
@@ -861,9 +864,9 @@ EIBnet6Driver::error_cb ()
   parent.stop();
 }
 
-void ConnState::tunnel_request(EIBnet_TunnelRequest &r1, EIBNet6IPSocket *isock)
+void ConnState_ipv6::tunnel_request(EIBnet6_TunnelRequest &r1, EIBNet6IPSocket *isock)
 {
-  EIBnet_TunnelACK r2;
+  EIBnet6_TunnelACK r2;
   r2.channel = r1.channel;
   r2.seqno = r1.seqno;
 
@@ -913,7 +916,7 @@ void ConnState::tunnel_request(EIBnet_TunnelRequest &r1, EIBNet6IPSocket *isock)
   reset_timer(); // presumably the client is alive if it can send
 }
 
-void ConnState::tunnel_response (EIBnet_TunnelACK &r1)
+void ConnState_ipv6::tunnel_response (EIBnet6_TunnelACK &r1)
 {
   TRACEPRINTF (t, 8, "TUNNEL_ACK");
   if (sno != r1.seqno)
@@ -952,9 +955,9 @@ void ConnState::tunnel_response (EIBnet_TunnelACK &r1)
     }
 }
 
-void ConnState::config_request(EIBnet_ConfigRequest &r1, EIBNet6IPSocket *isock)
+void ConnState_ipv6::config_request(EIBnet6_ConfigRequest &r1, EIBNet6IPSocket *isock)
 {
-  EIBnet_ConfigACK r2;
+  EIBnet6_ConfigACK r2;
   if (rno == ((r1.seqno + 1) & 0xff))
     {
       r2.channel = r1.channel;
@@ -1025,7 +1028,7 @@ void ConnState::config_request(EIBnet_ConfigRequest &r1, EIBNet6IPSocket *isock)
   isock->Send (r2.ToPacket (), daddr);
 }
 
-void ConnState::config_response (EIBnet_ConfigACK &r1)
+void ConnState_ipv6::config_response (EIBnet6_ConfigACK &r1)
 {
   TRACEPRINTF (t, 8, "CONFIG_ACK");
   if (sno != r1.seqno)

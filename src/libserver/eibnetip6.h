@@ -281,7 +281,7 @@ public:
   uint16_t installid;
   serialnumber_t serial;
   Array < DIB_service_Entry > services;
-  struct in_addr multicastaddr;
+  struct in6_addr multicastaddr;
   uchar MAC[6];
   uchar name[30];
   CArray optional;
@@ -313,7 +313,7 @@ public:
   uint16_t installid;
   serialnumber_t serial;
   Array < DIB_service_Entry > services;
-  struct in_addr multicastaddr;
+  struct in6_addr multicastaddr;
   uchar MAC[6];
   uchar name[30];
   struct sockaddr_in6 caddr;
@@ -409,7 +409,7 @@ private:
   void send_q_drop();
 
   /** multicast address */
-  struct ip_mreq maddr;
+  struct ipv6_mreq maddr;
   /** file descriptor */
   int fd;
   /** multicast in use? */
@@ -423,7 +423,7 @@ public:
   void stop();
 
   /** enables multicast */
-  bool SetMulticast (struct ip_mreq multicastaddr);
+  bool SetMulticast (struct ipv6_mreq multicastaddr);
   /** sends a packet */
   void Send (EIBNet6IPPacket p, struct sockaddr_in6 addr);
   void Send (EIBNet6IPPacket p) { Send (p, sendaddr); }

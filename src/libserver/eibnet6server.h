@@ -71,9 +71,9 @@ public:
   struct sockaddr_in6 caddr;
 
   // handle various packets from the connection
-  void tunnel_request(EIBnet6_TunnelRequest &r1, EIBNetIPSocket *isock);
+  void tunnel_request(EIBnet6_TunnelRequest &r1, EIBNet6IPSocket *isock);
   void tunnel_response(EIBnet6_TunnelACK &r1);
-  void config_request(EIBnet6_ConfigRequest &r1, EIBNetIPSocket *isock);
+  void config_request(EIBnet6_ConfigRequest &r1, EIBNet6IPSocket *isock);
   void config_response (EIBnet6_ConfigACK &r1);
 
   void send_L_Data (LDataPtr l);
@@ -85,9 +85,9 @@ typedef std::shared_ptr<ConnState_ipv6> ConnState_ipv6Ptr;
 /** Driver for routing */
 class EIBnet6Driver : public SubDriver
 {
-  EIBNetIPSocket *sock; // receive only
+  EIBNet6IPSocket *sock; // receive only
 
-  void recv_cb(EIBNetIPPacket *p);
+  void recv_cb(EIBNet6IPPacket *p);
   EIBPacketCallback on_recv;
   void error_cb();
 
@@ -100,7 +100,7 @@ public:
   // void start();
   // void stop();
 
-  void Send (EIBNetIPPacket p, struct sockaddr_in6 addr);
+  void Send (EIBNet6IPPacket p, struct sockaddr_in6 addr);
 
   void send_L_Data (LDataPtr l);
 };
@@ -109,11 +109,11 @@ typedef std::shared_ptr<EIBnet6Driver> EIBnet6DriverPtr;
 
 SERVER(EIBnet6Server,ets_router6)
 {
-  friend class ConnState_ipv6_ipv6;
+  friend class ConnState_ipv6;
   friend class EIBnet6Driver;
 
   EIBnet6DriverPtr mcast;   // used for multicast receiving
-  EIBNetIPSocket *sock;  // used for normal dialog
+  EIBNet6IPSocket *sock;  // used for normal dialog
 
   int sock_mac;          // used to query the list of interfaces
   int Port;              // copy of sock->port()
@@ -137,7 +137,7 @@ SERVER(EIBnet6Server,ets_router6)
                  eibaddr_t addr = 0);
   void addNAT (const LDataPtr &&l);
 
-  void recv_cb(EIBNetIPPacket *p);
+  void recv_cb(EIBNet6IPPacket *p);
   void error_cb();
 
   void stop_();
@@ -148,15 +148,15 @@ public:
   void start();
   void stop();
 
-  void handle_packet (EIBNetIPPacket *p1, EIBNetIPSocket *isock);
+  void handle_packet (EIBNet6IPPacket *p1, EIBNet6IPSocket *isock);
 
   void drop_connection (ConnState_ipv6Ptr s);
   ev::async drop_trigger; void drop_trigger_cb(ev::async &w, int revents);
 
-  inline void Send (EIBNetIPPacket p) {
+  inline void Send (EIBNet6IPPacket p) {
     Send (p, mcast->maddr);
   }
-  inline void Send (EIBNetIPPacket p, struct sockaddr_in addr) {
+  inline void Send (EIBNet6IPPacket p, struct sockaddr_in6 addr) {
     if (sock)
       sock->Send (p, addr);
   }
